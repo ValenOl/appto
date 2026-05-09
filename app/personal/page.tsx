@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/server";
 import { submitReply } from "@/app/actions/reviews";
+import { signOut } from "@/app/actions/auth";
 import type {
   Profile,
   ReviewWithCompany,
@@ -26,11 +29,11 @@ interface ProfileData {
   links: GuarantorLinkWithProfile[];
 }
 
-async function getProfileData(cuit: string): Promise<ProfileData | null> {
+async function getProfileData(userId: string): Promise<ProfileData | null> {
   const { data: profileData, error: profileError } = await (supabase as any)
     .from("profiles")
     .select("*")
-    .eq("cuit", cuit)
+    .eq("user_id", userId)
     .single();
   const profile = profileData as Profile | null;
 
@@ -133,16 +136,13 @@ function generateInsights(
 // Page (Server Component)
 // ─────────────────────────────────────────────
 
-export default async function PersonalDashboard(props: {
-  searchParams: Promise<{ cuit?: string }>;
-}) {
-  const searchParams = await props.searchParams;
-  const cuit =
-    searchParams.cuit?.trim() !== "" && searchParams.cuit
-      ? searchParams.cuit.trim()
-      : "20324567899";
+export default async function PersonalDashboard() {
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) redirect("/login");
 
-  const result = await getProfileData(cuit);
+  const result = await getProfileData(user.id);
+  if (!result) redirect("/login");
 
   return (
     <div
@@ -166,50 +166,21 @@ export default async function PersonalDashboard(props: {
             >
               [ EDUCACIÓN FINANCIERA ]
             </a>
-            <a
-              href="#"
-              className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap"
-            >
-              [ CERRAR SESIÓN ]
-            </a>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                [ CERRAR SESIÓN ]
+              </button>
+            </form>
           </nav>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-10 flex flex-col gap-8">
-        {!result ? (
-          <NotFound cuit={cuit} />
-        ) : (
-          <Dashboard {...result} />
-        )}
+        <Dashboard {...result} />
       </main>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Not found
-// ─────────────────────────────────────────────
-
-function NotFound({ cuit }: { cuit: string }) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
-      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
-        SIN RESULTADOS
-      </span>
-      <p className="text-3xl font-black text-slate-900 tracking-tight">
-        PERFIL NO ENCONTRADO
-      </p>
-      <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
-        No existe un perfil asociado al CUIT{" "}
-        <span
-          className="font-bold tracking-widest"
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-        >
-          {cuit}
-        </span>{" "}
-        en la red ΛPPTO.
-      </p>
     </div>
   );
 }

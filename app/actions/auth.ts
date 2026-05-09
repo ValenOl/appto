@@ -38,6 +38,38 @@ export async function signUpCompany(formData: FormData) {
   redirect('/register/success')
 }
 
+export async function signUpUser(formData: FormData) {
+  const email    = formData.get('email')    as string
+  const password = formData.get('password') as string
+  const cuit     = formData.get('cuit')     as string
+
+  const supabase = await createClient()
+
+  const { data: authData, error } = await supabase.auth.signUp({ email, password })
+
+  if (error || !authData.user) {
+    redirect(`/register-user?error=${encodeURIComponent(error?.message ?? 'Error al crear el usuario')}`)
+  }
+
+  const userId = authData.user.id
+
+  const { data: existing } = await (supabase.from('profiles') as any)
+    .select('id')
+    .eq('cuit', cuit)
+    .single()
+
+  if (existing) {
+    await (supabase.from('profiles') as any)
+      .update({ user_id: userId })
+      .eq('cuit', cuit)
+  } else {
+    await (supabase.from('profiles') as any)
+      .insert({ cuit, user_id: userId, full_name: '', bcra_score: 0, estimated_income: 0 })
+  }
+
+  redirect('/personal')
+}
+
 export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()

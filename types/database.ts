@@ -48,6 +48,7 @@ export type Database = {
           full_name:        string
           bcra_score:       number
           estimated_income: number
+          user_id:          string | null
           created_at:       string
         }
         Insert: {
@@ -56,6 +57,7 @@ export type Database = {
           full_name:         string
           bcra_score:        number
           estimated_income:  number
+          user_id?:          string | null
           created_at?:       string
         }
         Update: {
@@ -64,6 +66,7 @@ export type Database = {
           full_name?:        string
           bcra_score?:       number
           estimated_income?: number
+          user_id?:          string | null
           created_at?:       string
         }
       }
