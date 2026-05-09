@@ -114,23 +114,21 @@ export default async function BusinessDashboard(props: {
   // ─────────────────────────────────────────────
 
   const searchParams = await props.searchParams;
-  const rawCuit = searchParams.cuit?.trim();
-  const cuit = rawCuit || "20324567899";
+  const rawCuit = searchParams.cuit?.trim() || undefined;
 
-  // Only consume a credit when the user explicitly submits a CUIT.
-  // Initial page load (no searchParam) skips the gate.
   let quotaExhausted = false;
   let exhaustedPlanTier = "";
+  let result: ProfileData | null = null;
 
   if (rawCuit) {
     const consumed = await consumeCredit(company.id);
     if (!consumed) {
       quotaExhausted = true;
       exhaustedPlanTier = company.plan_tier;
+    } else {
+      result = await getProfileData(rawCuit);
     }
   }
-
-  const result = quotaExhausted ? null : await getProfileData(cuit);
 
   return (
     <div
@@ -221,8 +219,10 @@ export default async function BusinessDashboard(props: {
           </button>
         </form>
 
-        {/* ── CRÉDITOS AGOTADOS ── */}
-        {quotaExhausted ? (
+        {/* ── ESTADOS ── */}
+        {!rawCuit ? (
+          <IdleState />
+        ) : quotaExhausted ? (
           <QuotaExhausted planTier={exhaustedPlanTier} />
         ) : !result ? (
           <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
@@ -238,7 +238,7 @@ export default async function BusinessDashboard(props: {
                 className="font-bold tracking-widest"
                 style={{ fontFamily: "var(--font-geist-mono), monospace" }}
               >
-                {cuit}
+                {rawCuit}
               </span>{" "}
               en la red ΛPPTO.
             </p>
@@ -248,6 +248,31 @@ export default async function BusinessDashboard(props: {
         )}
 
       </main>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Idle state — no search submitted yet
+// ─────────────────────────────────────────────
+
+function IdleState() {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-20 flex flex-col gap-6">
+      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
+        MOTOR DE CONSULTAS
+      </span>
+      <h2 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-none">
+        INGRESAR CUIT
+        <br />
+        <span className="font-light text-slate-300">PARA INICIAR</span>
+        <br />
+        AUDITORÍA
+      </h2>
+      <p className="text-sm font-light text-slate-400 max-w-sm leading-relaxed">
+        Cada consulta descuenta un crédito de tu ciclo activo. Ingresá el CUIT
+        o CUIL del sujeto a evaluar en el buscador de arriba.
+      </p>
     </div>
   );
 }
