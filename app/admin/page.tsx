@@ -143,7 +143,7 @@ function CompanyRow({ company }: { company: Company }) {
       {/* ── Info ── */}
       <div className="flex flex-col gap-2">
         <span className="text-base font-black text-slate-900">
-          {company.name}
+          {company.company_name}
         </span>
         <span
           className="text-xs tracking-[0.15em] text-slate-400"

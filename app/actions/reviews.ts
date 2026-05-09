@@ -16,8 +16,7 @@ export async function submitReply(formData: FormData) {
     return
   }
 
-  const { error } = await supabase
-    .from('reviews')
+  const { error } = await (supabase.from('reviews') as any)
     .update({ reply_text: replyText.trim() })
     .eq('id', reviewId.trim())
 

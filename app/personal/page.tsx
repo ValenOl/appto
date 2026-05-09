@@ -17,7 +17,7 @@ function formatDate(iso: string): string {
 }
 
 // ─────────────────────────────────────────────
-// Data fetching  (mismo patrón que /business)
+// Data fetching
 // ─────────────────────────────────────────────
 
 interface ProfileData {
@@ -27,29 +27,30 @@ interface ProfileData {
 }
 
 async function getProfileData(cuit: string): Promise<ProfileData | null> {
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileData, error: profileError } = await (supabase as any)
     .from("profiles")
     .select("*")
     .eq("cuit", cuit)
     .single();
+  const profile = profileData as Profile | null;
 
   if (profileError || !profile) return null;
 
-  const [{ data: reviews }, { data: links }] = await Promise.all([
-    supabase
+  const [{ data: reviewsData }, { data: linksData }] = await Promise.all([
+    (supabase as any)
       .from("reviews")
       .select("*, company:companies(*)")
       .eq("profile_id", profile.id),
-    supabase
+    (supabase as any)
       .from("guarantor_links")
-      .select("*, guarantor:profiles!guarantor_id(*)")
-      .eq("profile_id", profile.id),
+      .select("*, guarantor:profiles!linked_profile_id(*)")
+      .eq("primary_profile_id", profile.id),
   ]);
 
   return {
     profile,
-    reviews: (reviews ?? []) as ReviewWithCompany[],
-    links: (links ?? []) as GuarantorLinkWithProfile[],
+    reviews: (reviewsData ?? []) as ReviewWithCompany[],
+    links: (linksData ?? []) as GuarantorLinkWithProfile[],
   };
 }
 
@@ -66,36 +67,38 @@ interface Insight {
 
 function generateInsights(
   profile: Profile,
-  reviews: ReviewWithCompany[]
+  reviews: ReviewWithCompany[],
+  socialScore: number,
+  isApto: boolean
 ): Insight[] {
   const insights: Insight[] = [];
 
-  if (profile.bcra_situation === 1) {
+  if (profile.bcra_score === 1) {
     insights.push({
       type: "+",
       text: "Sin deudas registradas en el BCRA. Tu Situación 1 (Normal) es el mejor estado posible.",
     });
-  } else if (profile.bcra_situation <= 3) {
+  } else if (profile.bcra_score <= 3) {
     insights.push({
       type: "i",
-      text: `Situación BCRA ${profile.bcra_situation}: tenés deudas en seguimiento. Regularizarlas mejorará tu score.`,
+      text: `Situación BCRA ${profile.bcra_score}: tenés deudas en seguimiento. Regularizarlas mejorará tu score.`,
     });
   } else {
     insights.push({
       type: "!",
-      text: `Situación BCRA ${profile.bcra_situation}: deudas en mora detectadas. Contactá a tu entidad para regularizarlas.`,
+      text: `Situación BCRA ${profile.bcra_score}: deudas en mora detectadas. Contactá a tu entidad para regularizarlas.`,
     });
   }
 
-  if (profile.social_score >= 9) {
+  if (socialScore >= 9) {
     insights.push({
       type: "+",
-      text: `Tu Score Social de ${profile.social_score.toFixed(1)} te ubica en el percentil superior de la red ΛPPTO.`,
+      text: `Tu Score Social de ${socialScore.toFixed(1)} te ubica en el percentil superior de la red ΛPPTO.`,
     });
-  } else if (profile.social_score >= 7) {
+  } else if (socialScore >= 7) {
     insights.push({
       type: "i",
-      text: `Score Social de ${profile.social_score.toFixed(1)}. Sumá más empresas verificadas para subir tu reputación.`,
+      text: `Score Social de ${socialScore.toFixed(1)}. Sumá más empresas verificadas para subir tu reputación.`,
     });
   }
 
@@ -105,7 +108,7 @@ function generateInsights(
     );
     insights.push({
       type: "+",
-      text: `Tu historial en ${best.company.name} impacta positivamente en tu reputación crediticia.`,
+      text: `Tu historial en ${best.company.company_name} impacta positivamente en tu reputación crediticia.`,
     });
   }
 
@@ -116,7 +119,7 @@ function generateInsights(
     });
   }
 
-  if (profile.is_apto) {
+  if (isApto) {
     insights.push({
       type: "+",
       text: "Tu dictamen ΛPPTO es APTO. Las empresas adheridas pueden consultarte sin restricciones.",
@@ -216,8 +219,17 @@ function NotFound({ cuit }: { cuit: string }) {
 // ─────────────────────────────────────────────
 
 function Dashboard({ profile, reviews, links: _links }: ProfileData) {
-  const insights = generateInsights(profile, reviews);
-  const scoreIsHigh = profile.social_score > 7;
+  const isApto = profile.bcra_score === 1
+  const bcraLabel =
+    profile.bcra_score === 1
+      ? "Situación 1 (Normal)"
+      : `Situación ${profile.bcra_score} (Riesgo)`
+  const socialScore =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : 10.0
+  const scoreIsHigh = socialScore > 7
+  const insights = generateInsights(profile, reviews, socialScore, isApto);
 
   return (
     <>
@@ -245,7 +257,7 @@ function Dashboard({ profile, reviews, links: _links }: ProfileData) {
                 className="text-xs tracking-[0.15em] text-slate-400"
                 style={{ fontFamily: "var(--font-geist-mono), monospace" }}
               >
-                ESTADO BCRA: SITUACIÓN {profile.bcra_situation} ({profile.bcra_label.toUpperCase()})
+                ESTADO BCRA: {bcraLabel.toUpperCase()}
               </span>
               <span
                 className="text-xs tracking-[0.15em] text-slate-400"
@@ -271,7 +283,7 @@ function Dashboard({ profile, reviews, links: _links }: ProfileData) {
                     : { color: "#0f172a" }
                 }
               >
-                {profile.social_score.toFixed(1)}
+                {socialScore.toFixed(1)}
               </span>
               <span className="text-2xl font-black text-slate-200 mb-3 leading-none">
                 / 10
@@ -279,7 +291,7 @@ function Dashboard({ profile, reviews, links: _links }: ProfileData) {
             </div>
 
             <span className="text-sm font-light text-slate-500">
-              {profile.social_label}
+              Promedio de reseñas
             </span>
           </div>
         </div>
@@ -345,7 +357,7 @@ function Dashboard({ profile, reviews, links: _links }: ProfileData) {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm font-black text-slate-900">
-                      {review.company.name}
+                      {review.company.company_name}
                     </span>
                     <span
                       className="text-xs tracking-widest text-slate-400"
@@ -355,12 +367,12 @@ function Dashboard({ profile, reviews, links: _links }: ProfileData) {
                     </span>
                   </div>
                   <span className="self-start md:self-center text-[10px] font-black tracking-[0.2em] text-slate-500 border border-slate-200 rounded-md px-3 py-1.5 whitespace-nowrap">
-                    {review.rating_label}
+                    {review.rating} / 5
                   </span>
                 </div>
 
                 <p className="text-sm font-light text-slate-600 leading-relaxed max-w-2xl">
-                  {review.text}
+                  {review.comment}
                 </p>
               </div>
 

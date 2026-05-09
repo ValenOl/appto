@@ -1,104 +1,148 @@
-// ─────────────────────────────────────────────
-// Row types — shape of each record from the DB
-// ─────────────────────────────────────────────
-
-export interface Profile {
-  id: string              // UUID
-  cuit: string            // "20-28531940-2"
-  full_name: string
-  bcra_situation: number  // 1–6  (Situación BCRA)
-  bcra_label: string      // "Normal", "Con seguimiento", etc.
-  social_score: number    // 0.0–10.0
-  social_label: string    // "Alta Confianza", "Riesgo Moderado", etc.
-  estimated_income: number // ARS, ej: 1200000
-  income_type: string     // "Relación de Dependencia", "Monotributista", etc.
-  is_apto: boolean
-  created_at: string      // ISO 8601
-  updated_at: string      // ISO 8601
-}
-
-export interface Company {
-  id: string              // UUID
-  user_id: string         // UUID → auth.users.id
-  cuit: string            // "30-71234567-8"
-  name: string
-  verified: boolean
-  created_at: string
-  plan_tier: string           // "BASICO" | "PRO"
-  monthly_quota: number       // consultas totales por ciclo
-  queries_used: number        // consumidas en el ciclo activo
-  cycle_reset_date: string    // ISO 8601 — fecha del próximo reset
-  subscription_status: string // "pending" | "active" | "cancelled"
-}
-
-export interface Review {
-  id: string              // UUID
-  profile_id: string      // UUID → profiles.id
-  company_id: string      // UUID → companies.id
-  rating: number          // 1–5
-  rating_label: string    // "CONFIANZA MUY ALTA", "CONFIANZA ALTA", etc.
-  text: string
-  reply_text: string | null  // réplica pública del titular — null si no respondió
-  created_at: string
-}
-
-export interface GuarantorLink {
-  id: string              // UUID
-  profile_id: string      // UUID → profiles.id  (sujeto consultado)
-  guarantor_id: string    // UUID → profiles.id  (garante potencial)
-  link_type: string       // "Domicilio Compartido", "Apellido Común", etc.
-  risk_level: string      // "RIESGO BAJO", "RIESGO MODERADO", "RIESGO ALTO"
-  risk_score: number      // 0.0–10.0
-  created_at: string
-}
-
-// ─────────────────────────────────────────────
-// Joined types — usados en la UI tras un JOIN
-// ─────────────────────────────────────────────
-
-export interface ReviewWithCompany extends Review {
-  company: Company
-}
-
-export interface GuarantorLinkWithProfile extends GuarantorLink {
-  guarantor: Profile
-}
-
-// ─────────────────────────────────────────────
-// Database schema — tipado para el cliente Supabase
-// ─────────────────────────────────────────────
-
 export type Database = {
   public: {
     Tables: {
-      profiles: {
-        Row: Profile
-        Insert: Omit<Profile, "id" | "created_at" | "updated_at">
-        Update: Partial<Omit<Profile, "id" | "created_at" | "updated_at">>
-      }
+
       companies: {
-        Row: Company
-        Insert: Omit<Company, "id" | "created_at">
-        Update: Partial<Omit<Company, "id" | "created_at">>
+        Row: {
+          id:                  string
+          cuit:                string
+          company_name:        string
+          user_id:             string | null
+          subscription_status: string
+          plan_tier:           string
+          monthly_quota:       number
+          queries_used:        number
+          cycle_reset_date:    string
+          created_at:          string
+        }
+        Insert: {
+          id?:                  string
+          cuit:                 string
+          company_name:         string
+          user_id?:             string | null
+          subscription_status?: string
+          plan_tier:            string
+          monthly_quota:        number
+          queries_used?:        number
+          cycle_reset_date:     string
+          created_at?:          string
+        }
+        Update: {
+          id?:                  string
+          cuit?:                string
+          company_name?:        string
+          user_id?:             string | null
+          subscription_status?: string
+          plan_tier?:           string
+          monthly_quota?:       number
+          queries_used?:        number
+          cycle_reset_date?:    string
+          created_at?:          string
+        }
       }
+
+      profiles: {
+        Row: {
+          id:               string
+          cuit:             string
+          full_name:        string
+          bcra_score:       number
+          estimated_income: number
+          created_at:       string
+        }
+        Insert: {
+          id?:               string
+          cuit:              string
+          full_name:         string
+          bcra_score:        number
+          estimated_income:  number
+          created_at?:       string
+        }
+        Update: {
+          id?:               string
+          cuit?:             string
+          full_name?:        string
+          bcra_score?:       number
+          estimated_income?: number
+          created_at?:       string
+        }
+      }
+
       reviews: {
-        Row: Review
-        Insert: Omit<Review, "id" | "created_at">
-        Update: Partial<Omit<Review, "id" | "created_at">>
+        Row: {
+          id:          string
+          company_id:  string
+          profile_id:  string
+          rating:      number
+          comment:     string | null
+          reply_text:  string | null
+          created_at:  string
+        }
+        Insert: {
+          id?:         string
+          company_id:  string
+          profile_id:  string
+          rating:      number
+          comment?:    string | null
+          reply_text?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?:         string
+          company_id?: string
+          profile_id?: string
+          rating?:     number
+          comment?:    string | null
+          reply_text?: string | null
+          created_at?: string
+        }
       }
+
       guarantor_links: {
-        Row: GuarantorLink
-        Insert: Omit<GuarantorLink, "id" | "created_at">
-        Update: Partial<Omit<GuarantorLink, "id" | "created_at">>
+        Row: {
+          id:                 string
+          primary_profile_id: string
+          linked_profile_id:  string
+          relation_type:      string
+          created_at:         string
+        }
+        Insert: {
+          id?:                 string
+          primary_profile_id:  string
+          linked_profile_id:   string
+          relation_type:       string
+          created_at?:         string
+        }
+        Update: {
+          id?:                  string
+          primary_profile_id?:  string
+          linked_profile_id?:   string
+          relation_type?:       string
+          created_at?:          string
+        }
       }
+
     }
     Views: Record<string, never>
     Functions: {
       consume_credit: {
-        Args: { p_company_id: string }
-        Returns: Company[]
+        Args:    { p_company_id: string }
+        Returns: Database['public']['Tables']['companies']['Row'][]
       }
     }
     Enums: Record<string, never>
   }
 }
+
+// ─────────────────────────────────────────────
+// Convenience types — derivados del schema
+// ─────────────────────────────────────────────
+
+export type Company      = Database['public']['Tables']['companies']['Row']
+export type Profile      = Database['public']['Tables']['profiles']['Row']
+export type Review       = Database['public']['Tables']['reviews']['Row']
+export type GuarantorLink = Database['public']['Tables']['guarantor_links']['Row']
+
+// Join types usados en la UI tras SELECT con FK embed
+export type ReviewWithCompany        = Review & { company: Company }
+export type GuarantorLinkWithProfile = GuarantorLink & { guarantor: Profile }

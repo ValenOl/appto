@@ -23,7 +23,7 @@ export async function signUpCompany(formData: FormData) {
     .toISOString()
     .split('T')[0]
 
-  await supabase.from('companies').insert({
+  await (supabase.from('companies') as any).insert({
     user_id:             authData.user.id,
     cuit,
     name:                company_name,

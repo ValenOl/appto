@@ -12,8 +12,7 @@ export async function approveCompany(formData: FormData) {
     .toISOString()
     .split('T')[0]
 
-  await supabase
-    .from('companies')
+  await (supabase.from('companies') as any)
     .update({
       subscription_status: 'active',
       queries_used:        0,

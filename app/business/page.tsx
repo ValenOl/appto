@@ -28,7 +28,7 @@ import type {
 
 
 async function consumeCredit(companyId: string): Promise<Company | null> {
-  const { data, error } = await supabase.rpc("consume_credit", {
+  const { data, error } = await (supabase as any).rpc("consume_credit", {
     p_company_id: companyId,
   });
   if (error || !data || data.length === 0) return null;
@@ -60,7 +60,7 @@ interface ProfileData {
 }
 
 async function getProfileData(cuit: string): Promise<ProfileData | null> {
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await (supabase as any)
     .from("profiles")
     .select("*")
     .eq("cuit", cuit)
@@ -70,14 +70,14 @@ async function getProfileData(cuit: string): Promise<ProfileData | null> {
 
   // Fetch reviews and guarantor links in parallel
   const [{ data: reviews }, { data: links }] = await Promise.all([
-    supabase
+    (supabase as any)
       .from("reviews")
       .select("*, company:companies(*)")
       .eq("profile_id", profile.id),
-    supabase
+    (supabase as any)
       .from("guarantor_links")
-      .select("*, guarantor:profiles!guarantor_id(*)")
-      .eq("profile_id", profile.id),
+      .select("*, guarantor:profiles!linked_profile_id(*)")
+      .eq("primary_profile_id", profile.id),
   ]);
 
   return {
@@ -99,11 +99,12 @@ export default async function BusinessDashboard(props: {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: company } = await authClient
+  const { data: companyData } = await authClient
     .from("companies")
     .select("*")
     .eq("user_id", user.id)
     .single();
+  const company = companyData as Company | null;
 
   if (!company) redirect("/login");
 
@@ -288,7 +289,7 @@ function PendingGate({ company }: { company: Company }) {
           style={{ fontFamily: "var(--font-geist-mono), monospace" }}
         >
           <p className="text-sm text-slate-400 tracking-[0.08em]">
-            EMPRESA: {company.name} | CUIT: {company.cuit} | PLAN:{" "}
+            EMPRESA: {company.company_name} | CUIT: {company.cuit} | PLAN:{" "}
             {company.plan_tier}
           </p>
         </div>
@@ -359,6 +360,16 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
 // ─────────────────────────────────────────────
 
 function Results({ profile, reviews, links }: ProfileData) {
+  const isApto = profile.bcra_score === 1
+  const bcraLabel =
+    profile.bcra_score === 1
+      ? "Situación 1 (Normal)"
+      : `Situación ${profile.bcra_score} (Riesgo)`
+  const socialScore =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : 10.0
+
   return (
     <>
       {/* ── TARJETA DE RESULTADOS ── */}
@@ -380,7 +391,7 @@ function Results({ profile, reviews, links }: ProfileData) {
         {/* Veredicto */}
         <div
           className={`mx-10 mt-8 mb-2 rounded-2xl border px-8 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
-            profile.is_apto
+            isApto
               ? "bg-green-50 border-green-100"
               : "bg-red-50 border-red-100"
           }`}
@@ -388,7 +399,7 @@ function Results({ profile, reviews, links }: ProfileData) {
           <div className="flex flex-col gap-1">
             <span
               className={`text-[10px] font-black tracking-[0.35em] uppercase opacity-70 ${
-                profile.is_apto ? "text-green-700" : "text-red-700"
+                isApto ? "text-green-700" : "text-red-700"
               }`}
             >
               DICTAMEN APPTO
@@ -396,18 +407,18 @@ function Results({ profile, reviews, links }: ProfileData) {
             <span
               className="text-3xl md:text-4xl font-black tracking-tight"
               style={
-                profile.is_apto
+                isApto
                   ? { color: "var(--color-secondary)" }
                   : { color: "#991b1b" }
               }
             >
-              {profile.is_apto ? "APTO PARA CRÉDITO" : "NO RECOMENDADO"}
+              {isApto ? "APTO PARA CRÉDITO" : "NO RECOMENDADO"}
             </span>
           </div>
           <span
             className="self-start md:self-center text-[10px] font-black tracking-[0.2em] border rounded-lg px-4 py-2 whitespace-nowrap"
             style={
-              profile.is_apto
+              isApto
                 ? {
                     color: "var(--color-secondary)",
                     borderColor: "var(--color-secondary)",
@@ -426,10 +437,7 @@ function Results({ profile, reviews, links }: ProfileData) {
               SCORE BCRA
             </span>
             <span className="text-2xl font-extrabold text-slate-900 leading-tight">
-              Situación {profile.bcra_situation}
-            </span>
-            <span className="text-sm font-light text-slate-500">
-              {profile.bcra_label}
+              {bcraLabel}
             </span>
           </div>
 
@@ -438,10 +446,10 @@ function Results({ profile, reviews, links }: ProfileData) {
               SCORE SOCIAL
             </span>
             <span className="text-2xl font-extrabold text-slate-900 leading-tight">
-              {profile.social_score.toFixed(1)} / 10
+              {socialScore.toFixed(1)} / 10
             </span>
             <span className="text-sm font-light text-slate-500">
-              {profile.social_label}
+              Promedio de reseñas
             </span>
           </div>
 
@@ -451,9 +459,6 @@ function Results({ profile, reviews, links }: ProfileData) {
             </span>
             <span className="text-2xl font-extrabold text-slate-900 leading-tight">
               $ {formatIncome(profile.estimated_income)}
-            </span>
-            <span className="text-sm font-light text-slate-500">
-              {profile.income_type}
             </span>
           </div>
         </div>
@@ -487,23 +492,13 @@ function Results({ profile, reviews, links }: ProfileData) {
                   CUIT: {link.guarantor.cuit}
                 </span>
                 <span className="text-xs font-light text-slate-500 mt-1">
-                  {link.link_type}
+                  {link.relation_type}
                 </span>
               </div>
 
-              <div className="flex items-center gap-6 md:gap-8 shrink-0">
-                <div className="flex flex-col gap-0.5 text-right">
-                  <span className="text-[10px] font-black tracking-widest text-slate-400">
-                    {link.risk_level}
-                  </span>
-                  <span className="text-xl font-extrabold text-slate-800">
-                    {link.risk_score.toFixed(1)} / 10
-                  </span>
-                </div>
-                <button className="text-[10px] font-black tracking-[0.15em] text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-4 py-2.5 transition-colors whitespace-nowrap cursor-pointer">
-                  [ EVALUAR GARANTE ]
-                </button>
-              </div>
+              <button className="self-start md:self-center text-[10px] font-black tracking-[0.15em] text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-4 py-2.5 transition-colors whitespace-nowrap cursor-pointer">
+                [ EVALUAR GARANTE ]
+              </button>
             </div>
           ))}
         </div>
@@ -529,7 +524,7 @@ function Results({ profile, reviews, links }: ProfileData) {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-black text-slate-900">
-                    {review.company.name}
+                    {review.company.company_name}
                   </span>
                   <span
                     className="text-xs tracking-widest text-slate-400"
@@ -539,11 +534,11 @@ function Results({ profile, reviews, links }: ProfileData) {
                   </span>
                 </div>
                 <span className="self-start md:self-center text-[10px] font-black tracking-[0.2em] text-slate-500 border border-slate-200 rounded-md px-3 py-1.5 whitespace-nowrap">
-                  {review.rating_label}
+                  {review.rating} / 5
                 </span>
               </div>
               <p className="text-sm font-light text-slate-600 leading-relaxed max-w-2xl">
-                {review.text}
+                {review.comment}
               </p>
             </div>
           ))}
