@@ -1,3 +1,9 @@
+export interface DebtEntry {
+  descripcion: string
+  situacion:   number
+  monto:       number   // raw BCRA value — in thousands of ARS
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -170,12 +176,6 @@ export type Database = {
 // ─────────────────────────────────────────────
 // Convenience types — derivados del schema
 // ─────────────────────────────────────────────
-
-export interface DebtEntry {
-  descripcion: string
-  situacion:   number
-  monto:       number   // raw BCRA value — in thousands of ARS
-}
 
 export type Company       = Database['public']['Tables']['companies']['Row']
 export type Profile       = Database['public']['Tables']['profiles']['Row']
