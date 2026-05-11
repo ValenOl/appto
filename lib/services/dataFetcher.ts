@@ -4,8 +4,9 @@ import { fetchFullBcraReport } from "./bcraService";
 import { getPossibleCuils } from "@/lib/utils/cuitHelper";
 
 export interface ProfileFetch {
-  profile: Profile;
-  isNew:   boolean;  // true = fresh BCRA fetch (billable), false = cache hit (free)
+  profile:               Profile;
+  isNew:                 boolean;  // true = fresh BCRA fetch (billable), false = cache hit (free)
+  hasHistoricalActivity: boolean;  // false = Estado A (never in system), true = Estado B (zero debt)
 }
 
 export async function getOrFetchProfile(input: string): Promise<ProfileFetch | null> {
@@ -21,11 +22,12 @@ export async function getOrFetchProfile(input: string): Promise<ProfileFetch | n
       .gte("created_at", thirtyDaysAgo.toISOString())
       .maybeSingle();
 
-    if (cached) return { profile: cached as Profile, isNew: false };
+    // Cache hits were found in BCRA before, so historical activity is guaranteed.
+    if (cached) return { profile: cached as Profile, isNew: false, hasHistoricalActivity: true };
 
-    const profile = await fetchFullBcraReport(input);
-    if (!profile) return null;  // BCRA 404 — Rule B
-    return { profile, isNew: true };
+    const result = await fetchFullBcraReport(input);
+    if (!result) return null;  // Estado A — BCRA 404 across all endpoints
+    return { profile: result.profile, isNew: true, hasHistoricalActivity: result.hasHistoricalActivity };
   }
 
   // ── DNI path (7–8 digits) ─────────────────────────────────────────────────
@@ -38,14 +40,14 @@ export async function getOrFetchProfile(input: string): Promise<ProfileFetch | n
     .gte("created_at", thirtyDaysAgo.toISOString())
     .maybeSingle();
 
-  if (cached) return { profile: cached as Profile, isNew: false };
+  if (cached) return { profile: cached as Profile, isNew: false, hasHistoricalActivity: true };
 
   // Cache miss — iterate possible CUILs and stop at the first BCRA hit.
   const cuils = getPossibleCuils(input);
   for (const cuil of cuils) {
-    const profile = await fetchFullBcraReport(cuil);
-    if (profile) return { profile, isNew: true };
+    const result = await fetchFullBcraReport(cuil);
+    if (result) return { profile: result.profile, isNew: true, hasHistoricalActivity: result.hasHistoricalActivity };
   }
 
-  return null;  // BCRA 404 — Rule B
+  return null;  // Estado A — BCRA 404 across all CUILs
 }

@@ -80,12 +80,19 @@ async function bcraFetch<T>(path: string): Promise<T | null> {
       headers,
       cache: "no-store",
     });
+
+    console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
+
     if (!res.ok) return null;
 
     const json: BcraApiResponse<T> = await res.json();
+
+    console.log(`[BCRA] GET ${path} → API status ${json.status}`);
+
     if (json.status !== 200) return null;
     return json.results;
-  } catch {
+  } catch (err) {
+    console.log(`[BCRA] GET ${path} → ERROR ${(err as Error).message}`);
     return null;
   }
 }
@@ -105,11 +112,16 @@ export function calculateApptoScore(
 ): number {
   let score = 1000;
 
-  // Worst situation from the latest period
+  // Worst situation from the most recent period that actually has debt entries.
+  // The BCRA can return periodos[0] with empty entidades when current debt is $0,
+  // so we scan forward until we find a period with data instead of blindly taking [0]
+  // (which would produce Math.max(...[]) = -Infinity and corrupt the score).
   if (deuda?.periodos?.length) {
-    const latestPeriodo = deuda.periodos[0];
-    const worstSit = Math.max(...latestPeriodo.entidades.map((e) => e.situacion));
-    if (worstSit > 1) score -= (worstSit - 1) * 200;
+    const periodWithData = deuda.periodos.find((p) => p.entidades.length > 0);
+    if (periodWithData) {
+      const worstSit = Math.max(...periodWithData.entidades.map((e) => e.situacion));
+      if (worstSit > 1) score -= (worstSit - 1) * 200;
+    }
   }
 
   // Rejected checks in the last 6 months
@@ -134,14 +146,24 @@ export function calculateApptoScore(
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-export async function fetchFullBcraReport(cuit: string): Promise<Profile | null> {
+/**
+ * hasHistoricalActivity distinguishes two "clean" outcomes:
+ *   false → Estado A: CUIT truly never appeared in any BCRA endpoint (no records at all)
+ *   true  → Estado B: CUIT has past periods on record but zero active debt today
+ */
+export interface BcraProfileResult {
+  profile:               Profile;
+  hasHistoricalActivity: boolean;
+}
+
+export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResult | null> {
   const [deuda, historial, cheques] = await Promise.all([
     bcraFetch<BcraDeudaResults>(`/Deudas/${cuit}`),
     bcraFetch<BcraHistorialResults>(`/Historial/${cuit}`),
     bcraFetch<BcraChequesResults>(`/Cheques/${cuit}`),
   ]);
 
-  // No data at all → CUIT not found in BCRA
+  // All three null → CUIT truly not in BCRA (Estado A)
   if (!deuda && !historial && !cheques) return null;
 
   const denominacion =
@@ -150,16 +172,24 @@ export async function fetchFullBcraReport(cuit: string): Promise<Profile | null>
     cheques?.denominacion ??
     "SIN DENOMINACIÓN";
 
-  // Worst BCRA situation (default 1 if no debts — clean record)
-  let worstSituacion = 1;
-  if (deuda?.periodos?.length) {
-    const latest = deuda.periodos[0];
-    worstSituacion = Math.max(...latest.entidades.map((e) => e.situacion));
-  }
+  // Person has historical activity if any endpoint has at least one period/record,
+  // even when the most recent deuda period has empty entidades (zero current debt).
+  const hasHistoricalActivity =
+    (deuda?.periodos?.length    ?? 0) > 0 ||
+    (historial?.periodos?.length ?? 0) > 0 ||
+    (cheques?.causales?.length   ?? 0) > 0;
+
+  // Most recent period that actually carries debt entries.
+  // BCRA sends up to 24 months; periodos[0] can be empty when debt just hit $0.
+  const periodWithData = deuda?.periodos?.find((p) => p.entidades.length > 0) ?? null;
+
+  const worstSituacion = periodWithData
+    ? Math.max(...periodWithData.entidades.map((e) => e.situacion))
+    : 1;
 
   const apptoScore = calculateApptoScore(deuda, historial, cheques);
 
-  const debtDetail: DebtEntry[] = (deuda?.periodos?.[0]?.entidades ?? []).map((e) => ({
+  const debtDetail: DebtEntry[] = (periodWithData?.entidades ?? []).map((e) => ({
     descripcion: e.descripcion,
     situacion:   e.situacion,
     monto:       e.monto,
@@ -184,8 +214,11 @@ export async function fetchFullBcraReport(cuit: string): Promise<Profile | null>
   if (error) {
     // Upsert failed (likely RLS) — return un-persisted data so the query works;
     // next request will re-fetch from BCRA since there's nothing cached.
-    return { id: crypto.randomUUID(), user_id: null, ...payload } as Profile;
+    return {
+      profile: { id: crypto.randomUUID(), user_id: null, ...payload } as Profile,
+      hasHistoricalActivity,
+    };
   }
 
-  return data as Profile;
+  return { profile: data as Profile, hasHistoricalActivity };
 }

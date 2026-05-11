@@ -126,7 +126,8 @@ export default async function BusinessDashboard(props: {
   let quotaExhausted = false;
   let exhaustedPlanTier = "";
   let result: ProfileData | null = null;
-  let noHistory = false;
+  let noRecords = false;   // Estado A: CUIT/CUIL truly absent from all BCRA endpoints
+  let zeroDebt  = false;   // Estado B: found in BCRA but zero active debt (has historical activity)
   let priorNote: Note | null = null;
   let internalNotes: Note[] = [];
 
@@ -134,8 +135,8 @@ export default async function BusinessDashboard(props: {
     const fetchOutcome = await getOrFetchProfile(rawCuit);
 
     if (fetchOutcome === null) {
-      // Rule B — BCRA 404, no credit consumed
-      noHistory = true;
+      // Estado A — all BCRA endpoints returned nothing, no credit consumed
+      noRecords = true;
     } else {
       if (fetchOutcome.isNew) {
         // Rule C — first successful BCRA fetch, consume credit
@@ -149,6 +150,16 @@ export default async function BusinessDashboard(props: {
 
       if (!quotaExhausted) {
         result = await getProfileContext(fetchOutcome.profile);
+
+        // Estado B: person was found in BCRA but currently carries no active debt.
+        // Only flag this when hasHistoricalActivity is true; if it's false the
+        // API responded but with fully empty arrays (treat as Estado A).
+        if (
+          fetchOutcome.hasHistoricalActivity &&
+          (fetchOutcome.profile.debt_detail?.length ?? 0) === 0
+        ) {
+          zeroDebt = true;
+        }
 
         const { data } = await authClient
           .from("notes")
@@ -221,8 +232,10 @@ export default async function BusinessDashboard(props: {
           <IdleState />
         ) : quotaExhausted ? (
           <QuotaExhausted planTier={exhaustedPlanTier} />
-        ) : noHistory ? (
-          <NoHistory cuit={rawCuit} />
+        ) : noRecords ? (
+          <NoRecords cuit={rawCuit} />
+        ) : zeroDebt && result ? (
+          <ZeroDebt cuit={rawCuit} denominacion={result.profile.full_name} />
         ) : !result ? (
           <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
             <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
@@ -282,17 +295,17 @@ function IdleState() {
 }
 
 // ─────────────────────────────────────────────
-// No BCRA history — Rule B state
+// Estado A — CUIT truly absent from all BCRA endpoints
 // ─────────────────────────────────────────────
 
-function NoHistory({ cuit }: { cuit: string }) {
+function NoRecords({ cuit }: { cuit: string }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
       <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
-        SIN HISTORIAL CREDITICIO
+        SIN REGISTROS EN BCRA
       </span>
       <p className="text-3xl font-black text-slate-900 tracking-tight">
-        PERSONA SIN DEUDA BCRA
+        SIN REGISTROS HISTÓRICOS
       </p>
       <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
         El identificador{" "}
@@ -302,11 +315,54 @@ function NoHistory({ cuit }: { cuit: string }) {
         >
           {cuit}
         </span>{" "}
-        no registra deudas ni historial en la Central de Deudores del BCRA.
+        no registra actividad en ningún período de la Central de Deudores del BCRA.
+        Es probable que esta persona nunca haya operado en el sistema financiero formal.
       </p>
       <p className="text-xs font-light text-slate-400 border-l-2 border-slate-200 pl-4 mt-2">
         Esta consulta no fue descontada de tu cuota mensual.
       </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Estado B — found in BCRA but zero active debt
+// ─────────────────────────────────────────────
+
+function ZeroDebt({ cuit, denominacion }: { cuit: string; denominacion: string }) {
+  return (
+    <div className="bg-white border border-green-100 rounded-2xl px-10 py-16 flex flex-col gap-4">
+      <span className="text-[10px] font-black tracking-[0.35em] text-green-600 uppercase">
+        HISTORIAL VERIFICADO — SIN DEUDA ACTIVA
+      </span>
+      <p className="text-3xl font-black text-slate-900 tracking-tight">
+        SITUACIÓN 1 — SIN DEUDA ACTIVA ACTUALMENTE
+      </p>
+      <p className="text-lg font-light text-slate-600">
+        {denominacion}
+      </p>
+      <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
+        El identificador{" "}
+        <span
+          className="font-bold tracking-widest"
+          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          {cuit}
+        </span>{" "}
+        registra historial crediticio en el BCRA pero no presenta deudas vigentes en el período
+        más reciente. La persona operó en el sistema financiero y se encuentra al día.
+      </p>
+      <div className="flex items-center gap-3 mt-2">
+        <span
+          className="text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-lg"
+          style={{ color: "var(--color-secondary)", backgroundColor: "rgba(0,120,80,0.06)", border: "1px solid var(--color-secondary)" }}
+        >
+          SITUACIÓN 1 (NORMAL)
+        </span>
+        <span className="text-[10px] font-black tracking-[0.2em] text-green-700 px-4 py-2 rounded-lg bg-green-50 border border-green-100">
+          APTO PARA CRÉDITO
+        </span>
+      </div>
     </div>
   );
 }
