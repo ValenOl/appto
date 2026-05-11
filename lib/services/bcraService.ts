@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Profile, DebtEntry } from "@/types/database";
 import { calculateApptoScore } from "@/lib/utils/scoring";
+import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
 const BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
 
@@ -175,4 +176,40 @@ export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResu
   }
 
   return { profile: data as Profile, hasHistoricalActivity };
+}
+
+// ── DNI retry loop ────────────────────────────────────────────────────────
+//
+// Tries each prefix in order (20 → 27 → 23 → 24) and stops at the first
+// BCRA hit. If all four fail, returns null (Estado A).
+// Only called when the input is NOT already an 11-digit CUIL.
+
+export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileResult | null> {
+  const paddedDni = rawDni.padStart(8, '0');
+
+  for (const prefix of DNI_PREFIXES) {
+    const cuil = buildCuil(prefix, paddedDni);
+
+    if (!cuil) {
+      console.log(`[BCRA] Prefijo ${prefix}+${paddedDni} → dígito verificador inválido (rem=1), saltando`);
+      continue;
+    }
+
+    console.log(`[BCRA] Probando CUIL: ${cuil} (prefijo ${prefix})`);
+
+    const result = await fetchFullBcraReport(cuil);
+
+    if (result) {
+      console.log(`[BCRA] Encontrado con CUIL: ${cuil} — ${result.profile.full_name}`);
+      return result;
+    }
+
+    const nextPrefix = DNI_PREFIXES[DNI_PREFIXES.indexOf(prefix) + 1];
+    if (nextPrefix) {
+      console.log(`[BCRA] Sin datos para ${cuil}, probando prefijo ${nextPrefix}...`);
+    }
+  }
+
+  console.log(`[BCRA] DNI ${paddedDni} → los ${DNI_PREFIXES.length} prefijos fallaron. Estado A.`);
+  return null;
 }

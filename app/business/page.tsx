@@ -277,7 +277,7 @@ export default async function BusinessDashboard(props: {
               type="text"
               name="cuit"
               defaultValue={searchParams.cuit ?? ""}
-              placeholder="CUIT/CUIL (11 dígitos) o DNI (7/8 dígitos)"
+              placeholder="DNI o CUIL sin guiones"
               className="
                 w-full text-3xl font-light text-slate-800 bg-transparent
                 border-0 border-b-2 border-slate-200
@@ -287,6 +287,9 @@ export default async function BusinessDashboard(props: {
                 transition-colors
               "
             />
+            <p className="text-xs font-light text-slate-400 tracking-wide">
+              Podés ingresar DNI o CUIL completo sin guiones. Con 11 dígitos se busca directamente.
+            </p>
           </div>
           <button
             type="submit"

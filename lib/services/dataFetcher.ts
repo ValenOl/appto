@@ -1,7 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/types/database";
-import { fetchFullBcraReport } from "./bcraService";
-import { getPossibleCuils } from "@/lib/utils/cuitHelper";
+import { fetchFullBcraReport, fetchBcraReportByDni } from "./bcraService";
 
 export interface ProfileFetch {
   profile:               Profile;
@@ -42,12 +41,9 @@ export async function getOrFetchProfile(input: string): Promise<ProfileFetch | n
 
   if (cached) return { profile: cached as Profile, isNew: false, hasHistoricalActivity: true };
 
-  // Cache miss — iterate possible CUILs and stop at the first BCRA hit.
-  const cuils = getPossibleCuils(input);
-  for (const cuil of cuils) {
-    const result = await fetchFullBcraReport(cuil);
-    if (result) return { profile: result.profile, isNew: true, hasHistoricalActivity: result.hasHistoricalActivity };
-  }
+  // Cache miss — retry all prefixes in order with per-prefix logging.
+  const result = await fetchBcraReportByDni(input);
+  if (result) return { profile: result.profile, isNew: true, hasHistoricalActivity: result.hasHistoricalActivity };
 
-  return null;  // Estado A — BCRA 404 across all CUILs
+  return null;  // Estado A — los 4 prefijos fallaron
 }
