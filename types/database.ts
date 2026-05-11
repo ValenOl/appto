@@ -1,7 +1,7 @@
 export interface DebtEntry {
   descripcion: string
   situacion:   number
-  monto:       number   // raw BCRA value — in thousands of ARS
+  monto:       number
 }
 
 export type Database = {
@@ -146,18 +146,18 @@ export type Database = {
           created_at:         string
         }
         Insert: {
-          id?:                 string
-          primary_profile_id:  string
-          linked_profile_id:   string
-          relation_type:       string
-          created_at?:         string
+          id?:                string
+          primary_profile_id: string
+          linked_profile_id:  string
+          relation_type:      string
+          created_at?:        string
         }
         Update: {
-          id?:                  string
-          primary_profile_id?:  string
-          linked_profile_id?:   string
-          relation_type?:       string
-          created_at?:          string
+          id?:                 string
+          primary_profile_id?: string
+          linked_profile_id?:  string
+          relation_type?:      string
+          created_at?:         string
         }
       }
 
@@ -174,7 +174,7 @@ export type Database = {
 }
 
 // ─────────────────────────────────────────────
-// Convenience types — derivados del schema
+// Convenience types
 // ─────────────────────────────────────────────
 
 export type Company       = Database['public']['Tables']['companies']['Row']
@@ -183,6 +183,5 @@ export type Review        = Database['public']['Tables']['reviews']['Row']
 export type Note          = Database['public']['Tables']['notes']['Row']
 export type GuarantorLink = Database['public']['Tables']['guarantor_links']['Row']
 
-// Join types usados en la UI tras SELECT con FK embed
 export type ReviewWithCompany        = Review & { company: Company }
 export type GuarantorLinkWithProfile = GuarantorLink & { guarantor: Profile }

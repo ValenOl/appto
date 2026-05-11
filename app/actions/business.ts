@@ -11,7 +11,7 @@ export async function saveNote(formData: FormData) {
   if (!content?.trim() || !profileId || !companyId) return
 
   const supabase = await createClient()
-  await supabase.from('notes').insert({
+  await (supabase as any).from('notes').insert({
     company_id: companyId,
     profile_id: profileId,
     content:    content.trim(),
