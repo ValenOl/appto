@@ -23,17 +23,20 @@ export async function signUpCompany(formData: FormData) {
     .toISOString()
     .split('T')[0]
 
-  await (supabase.from('companies') as any).insert({
+  const { error: insertError } = await (supabase.from('companies') as any).insert({
     user_id:             authData.user.id,
     cuit,
-    name:                company_name,
-    verified:            false,
+    company_name,
     plan_tier,
     monthly_quota,
     queries_used:        0,
     cycle_reset_date,
     subscription_status: 'pending',
   })
+
+  if (insertError) {
+    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent(insertError.message)}`)
+  }
 
   redirect('/register/success')
 }

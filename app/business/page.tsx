@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
+import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
+import { saveNote } from "@/app/actions/business";
 import type {
   Company,
   Profile,
+  Note,
+  DebtEntry,
   ReviewWithCompany,
   GuarantorLinkWithProfile,
 } from "@/types/database";
@@ -49,6 +53,12 @@ function formatDate(iso: string): string {
     .toUpperCase();
 }
 
+function formatFullDate(iso: string): string {
+  return new Date(iso)
+    .toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })
+    .toUpperCase();
+}
+
 // ─────────────────────────────────────────────
 // Data fetching
 // ─────────────────────────────────────────────
@@ -59,16 +69,13 @@ interface ProfileData {
   links: GuarantorLinkWithProfile[];
 }
 
-async function getProfileData(cuit: string): Promise<ProfileData | null> {
-  const { data: profile, error: profileError } = await (supabase as any)
-    .from("profiles")
-    .select("*")
-    .eq("cuit", cuit)
-    .single();
+interface ResultsProps extends ProfileData {
+  companyId:     string;
+  priorNote:     Note | null;
+  internalNotes: Note[];
+}
 
-  if (profileError || !profile) return null;
-
-  // Fetch reviews and guarantor links in parallel
+async function getProfileContext(profile: Profile): Promise<ProfileData> {
   const [{ data: reviews }, { data: links }] = await Promise.all([
     (supabase as any)
       .from("reviews")
@@ -83,7 +90,7 @@ async function getProfileData(cuit: string): Promise<ProfileData | null> {
   return {
     profile,
     reviews: (reviews ?? []) as ReviewWithCompany[],
-    links: (links ?? []) as GuarantorLinkWithProfile[],
+    links:   (links   ?? []) as GuarantorLinkWithProfile[],
   };
 }
 
@@ -103,7 +110,7 @@ export default async function BusinessDashboard(props: {
     .from("companies")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
   const company = companyData as Company | null;
 
   if (!company) redirect("/login");
@@ -114,63 +121,53 @@ export default async function BusinessDashboard(props: {
   // ─────────────────────────────────────────────
 
   const searchParams = await props.searchParams;
-  const rawCuit = searchParams.cuit?.trim() || undefined;
+  const rawCuit = searchParams.cuit?.replace(/\D/g, '') || undefined;
 
   let quotaExhausted = false;
   let exhaustedPlanTier = "";
   let result: ProfileData | null = null;
+  let noHistory = false;
+  let priorNote: Note | null = null;
+  let internalNotes: Note[] = [];
 
   if (rawCuit) {
-    const consumed = await consumeCredit(company.id);
-    if (!consumed) {
-      quotaExhausted = true;
-      exhaustedPlanTier = company.plan_tier;
+    const fetchOutcome = await getOrFetchProfile(rawCuit);
+
+    if (fetchOutcome === null) {
+      // Rule B — BCRA 404, no credit consumed
+      noHistory = true;
     } else {
-      result = await getProfileData(rawCuit);
+      if (fetchOutcome.isNew) {
+        // Rule C — first successful BCRA fetch, consume credit
+        const consumed = await consumeCredit(company.id);
+        if (!consumed) {
+          quotaExhausted = true;
+          exhaustedPlanTier = company.plan_tier;
+        }
+      }
+      // Rule A — isNew === false means cache hit, credit is NOT consumed (falls through)
+
+      if (!quotaExhausted) {
+        result = await getProfileContext(fetchOutcome.profile);
+
+        const { data } = await authClient
+          .from("notes")
+          .select("*")
+          .eq("company_id", company.id)
+          .eq("profile_id", fetchOutcome.profile.id)
+          .order("created_at", { ascending: false });
+        internalNotes = (data ?? []) as Note[];
+        priorNote = internalNotes.length > 0 ? internalNotes[0] : null;
+      }
     }
   }
 
   return (
     <div
-      className="min-h-screen bg-slate-50"
+      className="bg-slate-50"
       style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
     >
-      {/* ── TOPBAR ── */}
-      <header className="sticky top-0 z-50 bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
-          <span className="text-sm font-black tracking-tight text-slate-900 shrink-0">
-            ΛPPTO{" "}
-            <span className="font-light text-slate-400 tracking-widest text-xs">
-              [ BUSINESS ]
-            </span>
-          </span>
-
-          <nav className="flex items-center gap-6 md:gap-8 overflow-x-auto">
-            <a
-              href="/"
-              className="text-[11px] font-black tracking-[0.2em] text-slate-500 hover:text-slate-900 transition-colors whitespace-nowrap"
-            >
-              NUEVA CONSULTA
-            </a>
-            <a
-              href="#"
-              className="text-[11px] font-black tracking-[0.2em] text-slate-500 hover:text-slate-900 transition-colors whitespace-nowrap"
-            >
-              HISTORIAL
-            </a>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap cursor-pointer"
-              >
-                [ CERRAR SESIÓN ]
-              </button>
-            </form>
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-6 py-10 flex flex-col gap-8">
+      <main className="max-w-5xl mx-auto px-8 py-10 flex flex-col gap-8">
 
         {/* ── BUSCADOR ── */}
         {/*
@@ -195,7 +192,7 @@ export default async function BusinessDashboard(props: {
               type="text"
               name="cuit"
               defaultValue={searchParams.cuit ?? ""}
-              placeholder="Ingresar CUIT / CUIL"
+              placeholder="CUIT/CUIL (11 dígitos) o DNI (7/8 dígitos)"
               className="
                 w-full text-3xl font-light text-slate-800 bg-transparent
                 border-0 border-b-2 border-slate-200
@@ -224,27 +221,34 @@ export default async function BusinessDashboard(props: {
           <IdleState />
         ) : quotaExhausted ? (
           <QuotaExhausted planTier={exhaustedPlanTier} />
+        ) : noHistory ? (
+          <NoHistory cuit={rawCuit} />
         ) : !result ? (
           <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
             <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
               SIN RESULTADOS
             </span>
             <p className="text-3xl font-black text-slate-900 tracking-tight">
-              CUIT NO ENCONTRADO
+              IDENTIFICACIÓN NO ENCONTRADA
             </p>
             <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
-              No existe un perfil asociado al CUIT{" "}
+              No existe un perfil asociado a{" "}
               <span
                 className="font-bold tracking-widest"
                 style={{ fontFamily: "var(--font-geist-mono), monospace" }}
               >
                 {rawCuit}
               </span>{" "}
-              en la red ΛPPTO.
+              en ninguna fuente disponible.
             </p>
           </div>
         ) : (
-          <Results {...result} />
+          <Results
+            {...result}
+            companyId={company.id}
+            priorNote={priorNote}
+            internalNotes={internalNotes}
+          />
         )}
 
       </main>
@@ -272,6 +276,36 @@ function IdleState() {
       <p className="text-sm font-light text-slate-400 max-w-sm leading-relaxed">
         Cada consulta descuenta un crédito de tu ciclo activo. Ingresá el CUIT
         o CUIL del sujeto a evaluar en el buscador de arriba.
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// No BCRA history — Rule B state
+// ─────────────────────────────────────────────
+
+function NoHistory({ cuit }: { cuit: string }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
+      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
+        SIN HISTORIAL CREDITICIO
+      </span>
+      <p className="text-3xl font-black text-slate-900 tracking-tight">
+        PERSONA SIN DEUDA BCRA
+      </p>
+      <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
+        El identificador{" "}
+        <span
+          className="font-bold tracking-widest"
+          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          {cuit}
+        </span>{" "}
+        no registra deudas ni historial en la Central de Deudores del BCRA.
+      </p>
+      <p className="text-xs font-light text-slate-400 border-l-2 border-slate-200 pl-4 mt-2">
+        Esta consulta no fue descontada de tu cuota mensual.
       </p>
     </div>
   );
@@ -384,7 +418,7 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
-function Results({ profile, reviews, links }: ProfileData) {
+function Results({ profile, reviews, links, companyId, priorNote, internalNotes }: ResultsProps) {
   const isApto = profile.bcra_score === 1
   const bcraLabel =
     profile.bcra_score === 1
@@ -397,6 +431,19 @@ function Results({ profile, reviews, links }: ProfileData) {
 
   return (
     <>
+      {/* ── BANNER AUDITORÍA PREVIA ── */}
+      {priorNote && (
+        <div className="bg-slate-50 border border-slate-200 px-8 py-5 flex flex-col gap-1">
+          <span className="text-[9px] font-black tracking-[0.4em] text-slate-400 uppercase">
+            AUDITORÍA PREVIA
+          </span>
+          <p className="text-sm font-light text-slate-600">
+            Este perfil fue consultado por última vez el{" "}
+            <span className="font-black text-slate-900">{formatFullDate(priorNote.created_at)}</span>.
+          </p>
+        </div>
+      )}
+
       {/* ── TARJETA DE RESULTADOS ── */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
 
@@ -455,9 +502,21 @@ function Results({ profile, reviews, links }: ProfileData) {
           </span>
         </div>
 
-        {/* Tres columnas de datos */}
-        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-10 py-8">
+        {/* Cuatro columnas de datos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-10 py-8">
           <div className="flex flex-col gap-2 pb-6 md:pb-0 md:pr-10">
+            <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+              SCORE ΛPPTO
+            </span>
+            <span className="text-2xl font-extrabold text-slate-900 leading-tight">
+              {profile.appto_score ?? 0} / 1000
+            </span>
+            <span className="text-sm font-light text-slate-500">
+              Índice crediticio ΛPPTO
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2 py-6 md:py-0 md:px-10">
             <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
               SCORE BCRA
             </span>
@@ -488,6 +547,61 @@ function Results({ profile, reviews, links }: ProfileData) {
           </div>
         </div>
       </div>
+
+      {/* ── COMPOSICIÓN DE DEUDA ── */}
+      {profile.debt_detail && (profile.debt_detail as DebtEntry[]).length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="px-10 py-6 border-b border-slate-100">
+            <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+              COMPOSICIÓN DE DEUDA
+            </h2>
+            <p className="text-xs font-light text-slate-400 mt-1">
+              Entidades informantes en el último período disponible del BCRA.
+            </p>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-10 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                  Entidad
+                </th>
+                <th className="px-6 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                  Situación
+                </th>
+                <th className="px-10 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                  Monto Estimado
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(profile.debt_detail as DebtEntry[]).map((entry, i) => (
+                <tr key={i} className="border-b border-slate-100 last:border-0">
+                  <td className="px-10 py-4 text-sm font-light text-slate-700">
+                    {entry.descripcion}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`text-[10px] font-black tracking-[0.15em] px-3 py-1 ${
+                        entry.situacion === 1
+                          ? "bg-slate-100 text-slate-500"
+                          : "bg-red-50 text-red-700"
+                      }`}
+                    >
+                      SIT. {entry.situacion}
+                    </span>
+                  </td>
+                  <td
+                    className="px-10 py-4 text-sm font-light text-slate-700 text-right tabular-nums"
+                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                  >
+                    $ {formatIncome(entry.monto * 1000)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ── RED DE GARANTÍAS ── */}
       {links.length > 0 && (
@@ -569,6 +683,75 @@ function Results({ profile, reviews, links }: ProfileData) {
           ))}
         </div>
       )}
+
+      {/* ── NOTAS INTERNAS ── */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+
+        <div className="px-10 py-7 border-b border-slate-100">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            NOTAS INTERNAS
+          </h2>
+          <p className="text-xs font-light text-slate-400 mt-1">
+            Visibles solo para tu empresa. No se comparten con la red ΛPPTO.
+          </p>
+        </div>
+
+        {/* Formulario */}
+        <div className="px-10 py-7 border-b border-slate-100">
+          <form action={saveNote} className="flex flex-col gap-4">
+            <input type="hidden" name="profile_id" value={profile.id} />
+            <input type="hidden" name="company_id" value={companyId} />
+            <textarea
+              name="content"
+              required
+              rows={3}
+              placeholder="Agregá una nota sobre este perfil..."
+              className="
+                w-full bg-transparent border border-slate-200
+                px-4 py-3 text-sm font-light text-slate-700
+                placeholder:text-slate-300
+                focus:outline-none focus:border-slate-500
+                resize-none transition-colors
+              "
+            />
+            <button
+              type="submit"
+              className="
+                self-start px-8 py-3
+                text-[11px] font-black tracking-[0.2em] text-white
+                hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer
+              "
+              style={{ backgroundColor: "var(--color-secondary)" }}
+            >
+              GUARDAR NOTA
+            </button>
+          </form>
+        </div>
+
+        {/* Listado de notas */}
+        {internalNotes.length === 0 ? (
+          <div className="px-10 py-8">
+            <p className="text-sm font-light text-slate-400">Sin notas previas para este perfil.</p>
+          </div>
+        ) : (
+          internalNotes.map((note) => (
+            <div
+              key={note.id}
+              className="px-10 py-6 border-b border-slate-100 last:border-0 flex flex-col gap-2"
+            >
+              <span
+                className="text-[9px] font-black tracking-[0.35em] text-slate-300 uppercase"
+                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              >
+                {formatFullDate(note.created_at)}
+              </span>
+              <p className="text-sm font-light text-slate-600 leading-relaxed">
+                {note.content}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
 
       {/* ── DISCLAIMER ── */}
       <div className="bg-slate-100 rounded-2xl px-8 py-6 mb-4">

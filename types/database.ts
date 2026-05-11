@@ -47,27 +47,33 @@ export type Database = {
           cuit:             string
           full_name:        string
           bcra_score:       number
+          appto_score:      number
           estimated_income: number
           user_id:          string | null
           created_at:       string
+          debt_detail:      DebtEntry[] | null
         }
         Insert: {
           id?:               string
           cuit:              string
           full_name:         string
           bcra_score:        number
+          appto_score?:      number
           estimated_income:  number
           user_id?:          string | null
           created_at?:       string
+          debt_detail?:      DebtEntry[] | null
         }
         Update: {
           id?:               string
           cuit?:             string
           full_name?:        string
           bcra_score?:       number
+          appto_score?:      number
           estimated_income?: number
           user_id?:          string | null
           created_at?:       string
+          debt_detail?:      DebtEntry[] | null
         }
       }
 
@@ -97,6 +103,30 @@ export type Database = {
           rating?:     number
           comment?:    string | null
           reply_text?: string | null
+          created_at?: string
+        }
+      }
+
+      notes: {
+        Row: {
+          id:         string
+          company_id: string
+          profile_id: string
+          content:    string
+          created_at: string
+        }
+        Insert: {
+          id?:         string
+          company_id:  string
+          profile_id:  string
+          content:     string
+          created_at?: string
+        }
+        Update: {
+          id?:         string
+          company_id?: string
+          profile_id?: string
+          content?:    string
           created_at?: string
         }
       }
@@ -141,9 +171,16 @@ export type Database = {
 // Convenience types — derivados del schema
 // ─────────────────────────────────────────────
 
-export type Company      = Database['public']['Tables']['companies']['Row']
-export type Profile      = Database['public']['Tables']['profiles']['Row']
-export type Review       = Database['public']['Tables']['reviews']['Row']
+export interface DebtEntry {
+  descripcion: string
+  situacion:   number
+  monto:       number   // raw BCRA value — in thousands of ARS
+}
+
+export type Company       = Database['public']['Tables']['companies']['Row']
+export type Profile       = Database['public']['Tables']['profiles']['Row']
+export type Review        = Database['public']['Tables']['reviews']['Row']
+export type Note          = Database['public']['Tables']['notes']['Row']
 export type GuarantorLink = Database['public']['Tables']['guarantor_links']['Row']
 
 // Join types usados en la UI tras SELECT con FK embed
