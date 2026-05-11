@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { Profile, DebtEntry } from "@/types/database";
+import { calculateApptoScore } from "@/lib/utils/scoring";
 
 const BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
 
@@ -95,53 +96,6 @@ async function bcraFetch<T>(path: string): Promise<T | null> {
     console.log(`[BCRA] GET ${path} → ERROR ${(err as Error).message}`);
     return null;
   }
-}
-
-// ── ΛPPTO Score Calculator ────────────────────────────────────────────────
-//
-// Scale: 0–1000 (higher = better)
-//   Base:  1000
-//   -200   per BCRA situation point above 1 (e.g. Sit 3 → -400)
-//   -100   if rejected checks in the last 6 months
-//   -50    if history shows instability (situation jumps > 1 between periods)
-
-export function calculateApptoScore(
-  deuda:    BcraDeudaResults | null,
-  historial: BcraHistorialResults | null,
-  cheques:  BcraChequesResults | null
-): number {
-  let score = 1000;
-
-  // Worst situation from the most recent period that actually has debt entries.
-  // The BCRA can return periodos[0] with empty entidades when current debt is $0,
-  // so we scan forward until we find a period with data instead of blindly taking [0]
-  // (which would produce Math.max(...[]) = -Infinity and corrupt the score).
-  if (deuda?.periodos?.length) {
-    const periodWithData = deuda.periodos.find((p) => p.entidades.length > 0);
-    if (periodWithData) {
-      const worstSit = Math.max(...periodWithData.entidades.map((e) => e.situacion));
-      if (worstSit > 1) score -= (worstSit - 1) * 200;
-    }
-  }
-
-  // Rejected checks in the last 6 months
-  if (cheques?.causales?.length) {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const hasRecentRejection = cheques.causales.some(
-      (c) => new Date(c.fechaRechazo) >= sixMonthsAgo
-    );
-    if (hasRecentRejection) score -= 100;
-  }
-
-  // Historial instability: situation jump larger than 1 between any two periods
-  if (historial?.periodos && historial.periodos.length > 1) {
-    const sits = historial.periodos.map((p) => p.situacion);
-    const unstable = sits.some((s, i) => i > 0 && Math.abs(s - sits[i - 1]) > 1);
-    if (unstable) score -= 50;
-  }
-
-  return Math.max(0, score);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────

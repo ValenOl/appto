@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { saveNote } from "@/app/actions/business";
+import { generateAnalystVerdict } from "@/lib/utils/scoring";
 import type {
   Company,
   Profile,
@@ -178,7 +179,79 @@ export default async function BusinessDashboard(props: {
       className="bg-slate-50"
       style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
     >
+      {/* ── PRINT STYLES ── */}
+      <style>{`
+        @media print {
+          @page { margin: 2cm; size: A4 portrait; }
+
+          /* Remove screen chrome */
+          body { background: white !important; }
+          * { box-shadow: none !important; }
+
+          /* Flatten all color fills — keep borders, reset them to light gray */
+          *, *::before, *::after { background-color: white !important; }
+          [class*="border"] { border-color: #d1d5db !important; }
+
+          /* All text black */
+          * { color: #000 !important; }
+
+          /* Strip rounded corners for a document feel */
+          * { border-radius: 0 !important; }
+
+          /* Hide interactive and non-report elements */
+          #search-form, #page-footer, button { display: none !important; }
+
+          /* Reveal print-only header */
+          #print-header { display: flex !important; }
+
+          /* Analyst verdict — stand out with a heavy left rule */
+          #analyst-verdict {
+            border-left: 4px solid #000 !important;
+            padding-left: 20px !important;
+          }
+
+          /* Keep debt table together */
+          #debt-table { page-break-inside: avoid; }
+        }
+      `}</style>
+
       <main className="max-w-5xl mx-auto px-8 py-10 flex flex-col gap-8">
+
+        {/* ── PRINT HEADER (hidden on screen) ── */}
+        <div
+          id="print-header"
+          className="hidden flex-col gap-3 pb-6 mb-2"
+          style={{ borderBottom: "2px solid #000" }}
+        >
+          <div className="flex justify-between items-start">
+            <div className="flex flex-col gap-1">
+              <span
+                className="text-4xl font-black tracking-tight"
+                style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
+              >
+                ΛPPTO
+              </span>
+              <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase">
+                ANÁLISIS CREDITICIO OFICIAL
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-xs font-light text-slate-500">
+                Generado el {new Date().toLocaleDateString("es-AR", {
+                  day: "2-digit", month: "long", year: "numeric"
+                })}
+              </span>
+              {rawCuit && (
+                <span
+                  className="text-xs tracking-widest text-slate-400"
+                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                >
+                  IDENTIFICACIÓN: {rawCuit}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* ── BUSCADOR ── */}
         {/*
@@ -187,6 +260,7 @@ export default async function BusinessDashboard(props: {
           re-renders with the new searchParams.
         */}
         <form
+          id="search-form"
           method="get"
           action="/business"
           className="bg-white border border-slate-200 rounded-2xl px-8 py-7 flex flex-col md:flex-row gap-5 md:items-end"
@@ -518,6 +592,7 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
 
         {/* Veredicto */}
         <div
+          id="verdict-banner"
           className={`mx-10 mt-8 mb-2 rounded-2xl border px-8 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
             isApto
               ? "bg-green-50 border-green-100"
@@ -604,9 +679,16 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
         </div>
       </div>
 
+      {/* ── DICTAMEN DEL ANALISTA IA ── */}
+      <AnalystVerdict
+        bcraScore={profile.bcra_score}
+        apptoScore={profile.appto_score ?? 0}
+        debtDetail={(profile.debt_detail ?? []) as DebtEntry[]}
+      />
+
       {/* ── COMPOSICIÓN DE DEUDA ── */}
       {profile.debt_detail && (profile.debt_detail as DebtEntry[]).length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div id="debt-table" className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <div className="px-10 py-6 border-b border-slate-100">
             <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
               COMPOSICIÓN DE DEUDA
@@ -810,7 +892,7 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
       </div>
 
       {/* ── DISCLAIMER ── */}
-      <div className="bg-slate-100 rounded-2xl px-8 py-6 mb-4">
+      <div id="page-footer" className="bg-slate-100 rounded-2xl px-8 py-6 mb-4">
         <p className="text-xs font-light text-slate-500 leading-relaxed">
           <span className="font-black text-slate-600">[ i ]</span>{" "}
           La información presentada es de carácter referencial y no constituye una
@@ -820,5 +902,60 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
         </p>
       </div>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Analyst Verdict — rule-based IA recommendation
+// ─────────────────────────────────────────────
+
+function AnalystVerdict({
+  bcraScore,
+  apptoScore,
+  debtDetail,
+}: {
+  bcraScore:  number;
+  apptoScore: number;
+  debtDetail: DebtEntry[];
+}) {
+  const verdict = generateAnalystVerdict(bcraScore, apptoScore, debtDetail);
+  const isAlert = bcraScore >= 2 || debtDetail.length > 4;
+
+  return (
+    <div
+      id="analyst-verdict"
+      className="bg-white border border-slate-200 rounded-2xl px-10 py-8 flex flex-col gap-4"
+      style={{ borderLeft: `4px solid ${isAlert ? "#1e293b" : "#94a3b8"}` }}
+    >
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase">
+          DICTAMEN DEL ANALISTA IA
+        </span>
+        <span className="text-[9px] font-light tracking-[0.2em] text-slate-300 uppercase">
+          Análisis automatizado basado en datos BCRA
+        </span>
+      </div>
+      <p
+        className="text-xl font-light text-slate-800 leading-relaxed max-w-3xl"
+        style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
+      >
+        {verdict}
+      </p>
+      <div className="flex items-center gap-4 pt-2 border-t border-slate-100">
+        <span
+          className="text-[9px] font-black tracking-[0.3em] text-slate-400 uppercase"
+          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          SCORE ΛPPTO: {apptoScore} / 1000
+        </span>
+        <span className="text-slate-200">|</span>
+        <span
+          className="text-[9px] font-black tracking-[0.3em] text-slate-400 uppercase"
+          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          BCRA: SITUACIÓN {bcraScore}
+        </span>
+      </div>
+    </div>
   );
 }
