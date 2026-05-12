@@ -172,11 +172,14 @@ export default async function BusinessDashboard(props: {
             .insert({
               company_id:   company.id,
               query_target: rawCuit,
+              full_name:    fetchOutcome.profile.full_name,
               result_score: fetchOutcome.profile.appto_score,
               status:       "success",
             });
           if (histError) {
             console.error("[DATABASE ERROR] Falló el registro del historial:", histError);
+          } else {
+            console.log(`[DB] Auditoría registrada para CUIL: ${rawCuit}`);
           }
         } catch (err) {
           console.error("[DATABASE ERROR] Excepción al registrar historial:", err);
@@ -440,25 +443,29 @@ function ApiError({ cuit }: { cuit: string }) {
 
 function NoRecords({ cuit }: { cuit: string }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
-      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
-        SIN REGISTROS EN BCRA
+    <div className="bg-white border border-amber-200 rounded-2xl px-10 py-16 flex flex-col gap-4"
+         style={{ borderLeft: "4px solid #d97706" }}>
+      <span className="text-[10px] font-black tracking-[0.35em] text-amber-600 uppercase">
+        Sin actividad financiera formal
       </span>
       <p className="text-3xl font-black text-slate-900 tracking-tight">
-        SIN REGISTROS HISTÓRICOS
+        PERFIL SIN ACTIVIDAD FINANCIERA FORMAL
       </p>
-      <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
+      <p className="text-sm font-light text-slate-500 max-w-lg leading-relaxed">
         El identificador{" "}
         <span
-          className="font-bold tracking-widest"
+          className="font-bold tracking-widest text-slate-700"
           style={{ fontFamily: "var(--font-geist-mono), monospace" }}
         >
           {cuit}
         </span>{" "}
-        no registra actividad en ningún período de la Central de Deudores del BCRA.
-        Es probable que esta persona nunca haya operado en el sistema financiero formal.
+        no posee registros de deuda, tarjetas o préstamos informados al BCRA en los últimos 24 meses.
       </p>
-      <p className="text-xs font-light text-slate-400 border-l-2 border-slate-200 pl-4 mt-2">
+      <p className="text-xs text-slate-400 border-l-2 border-amber-200 pl-4 leading-relaxed">
+        Verifique si el número es correcto o si se trata de un perfil que opera
+        exclusivamente fuera del sistema bancario.
+      </p>
+      <p className="text-xs font-light text-slate-300 mt-1">
         Esta consulta no fue descontada de tu cuota mensual.
       </p>
     </div>

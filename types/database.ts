@@ -142,6 +142,7 @@ export type Database = {
           id:           string
           company_id:   string
           query_target: string
+          full_name:    string | null
           result_score: number | null
           status:       string
           created_at:   string
@@ -150,6 +151,7 @@ export type Database = {
           id?:           string
           company_id:    string
           query_target:  string
+          full_name?:    string | null
           result_score?: number | null
           status?:       string
           created_at?:   string
@@ -158,6 +160,7 @@ export type Database = {
           id?:           string
           company_id?:   string
           query_target?: string
+          full_name?:    string | null
           result_score?: number | null
           status?:       string
           created_at?:   string
