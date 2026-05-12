@@ -1,7 +1,7 @@
 export const preferredRegion = 'gru1'; // São Paulo — IPs not blocked by BCRA WAF
 
 import { redirect } from "next/navigation";
-import { supabase, getSupabaseAdmin } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
@@ -138,7 +138,7 @@ export default async function BusinessDashboard(props: {
   if (rawCuit) {
     let fetchOutcome: Awaited<ReturnType<typeof getOrFetchProfile>>;
     try {
-      fetchOutcome = await getOrFetchProfile(rawCuit);
+      fetchOutcome = await getOrFetchProfile(rawCuit, company.id);
     } catch {
       // Network/timeout error from BCRA — surface to the user rather than
       // caching a false "sin historial".
@@ -164,26 +164,6 @@ export default async function BusinessDashboard(props: {
 
       if (!quotaExhausted) {
         result = await getProfileContext(fetchOutcome.profile);
-
-        // Audit log — service_role bypasses RLS so this never silently fails.
-        try {
-          const { error: histError } = await (getSupabaseAdmin() as any)
-            .from("search_history")
-            .insert({
-              company_id:   company.id,
-              query_target: rawCuit,
-              full_name:    fetchOutcome.profile.full_name,
-              result_score: fetchOutcome.profile.appto_score,
-              status:       "success",
-            });
-          if (histError) {
-            console.error("[DATABASE ERROR] Falló el registro del historial:", histError);
-          } else {
-            console.log(`[DB] Auditoría registrada para CUIL: ${rawCuit}`);
-          }
-        } catch (err) {
-          console.error("[DATABASE ERROR] Excepción al registrar historial:", err);
-        }
 
         // Estado B: person was found in BCRA but currently carries no active debt.
         // Only flag this when hasHistoricalActivity is true; if it's false the

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import type { Company, SearchHistory } from "@/types/database";
