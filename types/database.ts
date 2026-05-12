@@ -137,6 +137,33 @@ export type Database = {
         }
       }
 
+      search_history: {
+        Row: {
+          id:           string
+          company_id:   string
+          query_target: string
+          result_score: number | null
+          status:       string
+          created_at:   string
+        }
+        Insert: {
+          id?:           string
+          company_id:    string
+          query_target:  string
+          result_score?: number | null
+          status?:       string
+          created_at?:   string
+        }
+        Update: {
+          id?:           string
+          company_id?:   string
+          query_target?: string
+          result_score?: number | null
+          status?:       string
+          created_at?:   string
+        }
+      }
+
       guarantor_links: {
         Row: {
           id:                 string
@@ -182,6 +209,7 @@ export type Profile       = Database['public']['Tables']['profiles']['Row']
 export type Review        = Database['public']['Tables']['reviews']['Row']
 export type Note          = Database['public']['Tables']['notes']['Row']
 export type GuarantorLink = Database['public']['Tables']['guarantor_links']['Row']
+export type SearchHistory = Database['public']['Tables']['search_history']['Row']
 
 export type ReviewWithCompany        = Review & { company: Company }
 export type GuarantorLinkWithProfile = GuarantorLink & { guarantor: Profile }

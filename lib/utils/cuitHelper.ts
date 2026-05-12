@@ -1,7 +1,7 @@
 const WEIGHTS = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2] as const;
 
-// Retry order: 20 (M), 27 (F), 23 (genérico), 24 (extranjeros / no estándar)
-export const DNI_PREFIXES = ['20', '27', '23', '24'] as const;
+// Retry order: 20 (M), 27 (F), 30 (empresa), 23 (genérico), 24 (extranjeros / no estándar)
+export const DNI_PREFIXES = ['20', '27', '30', '23', '24'] as const;
 
 function computeCheckDigit(prefix: string, paddedDni: string): number | null {
   const digits = (prefix + paddedDni).split('').map(Number);

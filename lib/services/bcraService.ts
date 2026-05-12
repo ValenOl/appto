@@ -316,6 +316,6 @@ export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileR
     return result;
   }
 
-  console.log(`[BCRA] DNI ${paddedDni} → los ${DNI_PREFIXES.length} prefijos fallaron. Estado A.`);
+  console.log(`[BCRA] Búsqueda agotada para DNI ${paddedDni}. ¿Verificado en ANSES/BCRA manualmente?`);
   return null;
 }
