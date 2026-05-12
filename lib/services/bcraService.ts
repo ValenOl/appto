@@ -66,61 +66,65 @@ interface BcraApiResponse<T> {
   results: T;
 }
 
-// ── HTTP helper ───────────────────────────────────────────────────────────
+// ── HTTP helpers ──────────────────────────────────────────────────────────
+//
+// Two variants with different error contracts:
+//
+//   bcraProbe  — strict: throws on any network/connection error, returns null
+//                on HTTP 4xx/5xx or API status ≠ 200.
+//                Use when you need to distinguish "not found" from "API down".
+//
+//   bcraFetch  — lenient: wraps bcraProbe in try/catch, always returns null
+//                on any failure. Use for secondary endpoints (historial, cheques)
+//                where partial data is acceptable.
 
-async function bcraFetch<T>(path: string): Promise<T | null> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  // Optional: BCRA_API_TOKEN for environments requiring auth
+function buildHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = process.env.BCRA_API_TOKEN;
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
 
+async function bcraProbe<T>(path: string): Promise<T | null> {
+  // No try/catch — network errors (DNS failure, timeout, ECONNREFUSED) propagate
+  // as thrown exceptions so callers can distinguish them from a clean 404.
+  const res = await fetch(`${BCRA_BASE}${path}`, {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+
+  console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
+
+  if (!res.ok) return null;
+
+  const json: BcraApiResponse<T> = await res.json();
+
+  console.log(`[BCRA] GET ${path} → API status ${json.status}`);
+
+  if (json.status !== 200) return null;
+  return json.results;
+}
+
+async function bcraFetch<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${BCRA_BASE}${path}`, {
-      headers,
-      cache: "no-store",
-    });
-
-    console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
-
-    if (!res.ok) return null;
-
-    const json: BcraApiResponse<T> = await res.json();
-
-    console.log(`[BCRA] GET ${path} → API status ${json.status}`);
-
-    if (json.status !== 200) return null;
-    return json.results;
+    return await bcraProbe<T>(path);
   } catch (err) {
     console.log(`[BCRA] GET ${path} → ERROR ${(err as Error).message}`);
     return null;
   }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────
+// ── Profile builder ───────────────────────────────────────────────────────
+//
+// Shared by both the CUIT path and the DNI retry loop. Converts raw BCRA
+// responses into a Profile and upserts it to Supabase.
 
-/**
- * hasHistoricalActivity distinguishes two "clean" outcomes:
- *   false → Estado A: CUIT truly never appeared in any BCRA endpoint (no records at all)
- *   true  → Estado B: CUIT has past periods on record but zero active debt today
- */
-export interface BcraProfileResult {
-  profile:               Profile;
-  hasHistoricalActivity: boolean;
-}
-
-export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResult | null> {
-  const [deuda, historial, cheques] = await Promise.all([
-    bcraFetch<BcraDeudaResults>(`/Deudas/${cuit}`),
-    bcraFetch<BcraHistorialResults>(`/Historial/${cuit}`),
-    bcraFetch<BcraChequesResults>(`/Cheques/${cuit}`),
-  ]);
-
-  // All three null → CUIT truly not in BCRA (Estado A)
-  if (!deuda && !historial && !cheques) return null;
-
+async function buildAndPersistProfile(
+  cuit:      string,
+  deuda:     BcraDeudaResults | null,
+  historial: BcraHistorialResults | null,
+  cheques:   BcraChequesResults | null,
+): Promise<BcraProfileResult> {
   const denominacion =
     deuda?.denominacion ??
     historial?.denominacion ??
@@ -178,11 +182,51 @@ export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResu
   return { profile: data as Profile, hasHistoricalActivity };
 }
 
-// ── DNI retry loop ────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────
+
+/**
+ * hasHistoricalActivity distinguishes two "clean" outcomes:
+ *   false → Estado A: CUIT truly never appeared in any BCRA endpoint (no records at all)
+ *   true  → Estado B: CUIT has past periods on record but zero active debt today
+ */
+export interface BcraProfileResult {
+  profile:               Profile;
+  hasHistoricalActivity: boolean;
+}
+
+// ── CUIT path (11 digits) ─────────────────────────────────────────────────
 //
-// Tries each prefix in order (20 → 27 → 23 → 24) and stops at the first
-// BCRA hit. If all four fail, returns null (Estado A).
-// Only called when the input is NOT already an 11-digit CUIL.
+// We already know the exact CUIT, so all three endpoints fire in parallel.
+// Uses bcraFetch (lenient) — a down endpoint yields null and the others
+// still contribute partial data.
+
+export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResult | null> {
+  const [deuda, historial, cheques] = await Promise.all([
+    bcraFetch<BcraDeudaResults>(`/Deudas/${cuit}`),
+    bcraFetch<BcraHistorialResults>(`/Historial/${cuit}`),
+    bcraFetch<BcraChequesResults>(`/Cheques/${cuit}`),
+  ]);
+
+  // All three null → CUIT truly not in BCRA (Estado A)
+  if (!deuda && !historial && !cheques) return null;
+
+  return buildAndPersistProfile(cuit, deuda, historial, cheques);
+}
+
+// ── DNI retry loop (sequential + lazy) ───────────────────────────────────
+//
+// Strategy: probe /Deudas only — one request per prefix, in order.
+//
+//   • Network error on /Deudas → THROW. The API is down; we must not continue
+//     to the next prefix or return null, because null gets cached as Estado A.
+//
+//   • HTTP 404 / API status ≠ 200 → not this prefix, try the next one.
+//
+//   • HTTP 200 with data → CUIL confirmed. Break the loop, then lazy-fetch
+//     /Historial and /Cheques for THIS CUIL only (lenient — partial data OK).
+//
+// This fires at most 1 + 2 = 3 requests on success, vs 12 with the old approach
+// of calling fetchFullBcraReport (3 parallel) for each of the 4 prefixes.
 
 export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileResult | null> {
   const paddedDni = rawDni.padStart(8, '0');
@@ -197,17 +241,36 @@ export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileR
 
     console.log(`[BCRA] Probando CUIL: ${cuil} (prefijo ${prefix})`);
 
-    const result = await fetchFullBcraReport(cuil);
-
-    if (result) {
-      console.log(`[BCRA] Encontrado con CUIL: ${cuil} — ${result.profile.full_name}`);
-      return result;
+    let deuda: BcraDeudaResults | null;
+    try {
+      deuda = await bcraProbe<BcraDeudaResults>(`/Deudas/${cuil}`);
+    } catch (err) {
+      // Network/timeout error — do NOT continue to next prefix.
+      // Treating this as "not found" would cache a false Estado A.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[BCRA] ERROR de red en /Deudas/${cuil}: ${msg} — abortando búsqueda, API posiblemente caída`);
+      throw err;
     }
 
-    const nextPrefix = DNI_PREFIXES[DNI_PREFIXES.indexOf(prefix) + 1];
-    if (nextPrefix) {
-      console.log(`[BCRA] Sin datos para ${cuil}, probando prefijo ${nextPrefix}...`);
+    if (!deuda) {
+      // Clean 404 — this prefix doesn't match. Try the next one.
+      const nextPrefix = DNI_PREFIXES[DNI_PREFIXES.indexOf(prefix) + 1];
+      if (nextPrefix) {
+        console.log(`[BCRA] Falló ${cuil}, probando prefijo ${nextPrefix}...`);
+      }
+      continue;
     }
+
+    // CUIL confirmed. Lazy-fetch the secondary endpoints for this CUIL only.
+    console.log(`[BCRA] Encontrado con CUIL: ${cuil} — cargando historial y cheques`);
+    const [historial, cheques] = await Promise.all([
+      bcraFetch<BcraHistorialResults>(`/Historial/${cuil}`),
+      bcraFetch<BcraChequesResults>(`/Cheques/${cuil}`),
+    ]);
+
+    const result = await buildAndPersistProfile(cuil, deuda, historial, cheques);
+    console.log(`[BCRA] Perfil construido: ${result.profile.full_name} — APPTO score ${result.profile.appto_score}`);
+    return result;
   }
 
   console.log(`[BCRA] DNI ${paddedDni} → los ${DNI_PREFIXES.length} prefijos fallaron. Estado A.`);

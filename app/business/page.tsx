@@ -129,13 +129,24 @@ export default async function BusinessDashboard(props: {
   let result: ProfileData | null = null;
   let noRecords = false;   // Estado A: CUIT/CUIL truly absent from all BCRA endpoints
   let zeroDebt  = false;   // Estado B: found in BCRA but zero active debt (has historical activity)
+  let apiError  = false;   // BCRA API down / network failure — do not treat as Estado A
   let priorNote: Note | null = null;
   let internalNotes: Note[] = [];
 
   if (rawCuit) {
-    const fetchOutcome = await getOrFetchProfile(rawCuit);
+    let fetchOutcome: Awaited<ReturnType<typeof getOrFetchProfile>>;
+    try {
+      fetchOutcome = await getOrFetchProfile(rawCuit);
+    } catch {
+      // Network/timeout error from BCRA — surface to the user rather than
+      // caching a false "sin historial".
+      apiError = true;
+      fetchOutcome = null;
+    }
 
-    if (fetchOutcome === null) {
+    if (apiError) {
+      // Handled below in render — no credit consumed.
+    } else if (fetchOutcome === null) {
       // Estado A — all BCRA endpoints returned nothing, no credit consumed
       noRecords = true;
     } else {
@@ -307,6 +318,8 @@ export default async function BusinessDashboard(props: {
         {/* ── ESTADOS ── */}
         {!rawCuit ? (
           <IdleState />
+        ) : apiError ? (
+          <ApiError cuit={rawCuit} />
         ) : quotaExhausted ? (
           <QuotaExhausted planTier={exhaustedPlanTier} />
         ) : noRecords ? (
@@ -366,6 +379,37 @@ function IdleState() {
       <p className="text-sm font-light text-slate-400 max-w-sm leading-relaxed">
         Cada consulta descuenta un crédito de tu ciclo activo. Ingresá el CUIT
         o CUIL del sujeto a evaluar en el buscador de arriba.
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// API Error — network failure reaching BCRA
+// ─────────────────────────────────────────────
+
+function ApiError({ cuit }: { cuit: string }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-16 flex flex-col gap-4">
+      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
+        ERROR DE CONEXIÓN
+      </span>
+      <p className="text-3xl font-black text-slate-900 tracking-tight">
+        API DEL BCRA NO DISPONIBLE
+      </p>
+      <p className="text-sm font-light text-slate-500 max-w-sm leading-relaxed">
+        No se pudo conectar con la Central de Deudores del BCRA al consultar{" "}
+        <span
+          className="font-bold tracking-widest"
+          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          {cuit}
+        </span>.
+        El servicio puede estar temporalmente saturado o en mantenimiento.
+        No se descontó ningún crédito de tu cuota.
+      </p>
+      <p className="text-xs font-light text-slate-400 border-l-2 border-slate-200 pl-4 mt-2">
+        Reintentá en unos minutos. Si el error persiste, consultá el estado de la API del BCRA.
       </p>
     </div>
   );
