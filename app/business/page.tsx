@@ -1,3 +1,5 @@
+export const preferredRegion = 'gru1'; // São Paulo — IPs not blocked by BCRA WAF
+
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";

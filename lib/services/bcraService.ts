@@ -134,6 +134,30 @@ async function bcraFetch<T>(path: string): Promise<T | null> {
   }
 }
 
+function isEconnreset(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const cause = (err as NodeJS.ErrnoException & { cause?: unknown }).cause;
+  return (cause as NodeJS.ErrnoException)?.code === 'ECONNRESET';
+}
+
+// One automatic retry on ECONNRESET (WAF geo-block drops TCP mid-connection).
+// All other errors propagate immediately.
+async function probeDeuda(path: string): Promise<BcraDeudaResults | null> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await bcraProbe<BcraDeudaResults>(path);
+    } catch (err) {
+      if (attempt === 1 && isEconnreset(err)) {
+        console.log(`[BCRA] ECONNRESET → esperando 1500ms y reintentando ${path} (intento 2/2)...`);
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('unreachable');
+}
+
 // ── Profile builder ───────────────────────────────────────────────────────
 //
 // Shared by both the CUIT path and the DNI retry loop. Converts raw BCRA
@@ -263,7 +287,7 @@ export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileR
 
     let deuda: BcraDeudaResults | null;
     try {
-      deuda = await bcraProbe<BcraDeudaResults>(`/Deudas/${cuil}`);
+      deuda = await probeDeuda(`/Deudas/${cuil}`);
     } catch (err) {
       // Network/timeout error — do NOT continue to next prefix.
       // Treating this as "not found" would cache a false Estado A.
