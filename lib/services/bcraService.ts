@@ -3,7 +3,8 @@ import type { Profile, DebtEntry } from "@/types/database";
 import { calculateApptoScore } from "@/lib/utils/scoring";
 import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
-const BCRA_BASE = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
+const BCRA_BASE        = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
+const BCRA_TIMEOUT_MS  = 10_000;
 
 // ── BCRA API response types ───────────────────────────────────────────────
 // Documented at: https://www.bcra.gob.ar/BCRAyVos/Sistemas_Financieros.asp
@@ -79,18 +80,37 @@ interface BcraApiResponse<T> {
 //                where partial data is acceptable.
 
 function buildHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
+    // Some government APIs drop connections from data-center IPs with no User-Agent.
+    "User-Agent":   "APPTO/1.0 (Central de Deudores client)",
+  };
   const token = process.env.BCRA_API_TOKEN;
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
+// Extracts the full error description including the underlying cause that
+// Node.js / undici wraps inside err.cause (e.g. ECONNREFUSED, CERT_HAS_EXPIRED,
+// UNABLE_TO_VERIFY_LEAF_SIGNATURE, timeout, etc.).
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as NodeJS.ErrnoException & { cause?: unknown }).cause;
+  const causeStr = cause
+    ? ` | causa: ${cause instanceof Error ? cause.message : String(cause)}`
+    : '';
+  return `${err.name}: ${err.message}${causeStr}`;
+}
+
 async function bcraProbe<T>(path: string): Promise<T | null> {
-  // No try/catch — network errors (DNS failure, timeout, ECONNREFUSED) propagate
-  // as thrown exceptions so callers can distinguish them from a clean 404.
+  // No try/catch — network errors (DNS failure, ECONNREFUSED, SSL, timeout)
+  // propagate as thrown exceptions so callers can distinguish them from a 404.
+  // AbortSignal.timeout() fires a TimeoutError after BCRA_TIMEOUT_MS ms.
   const res = await fetch(`${BCRA_BASE}${path}`, {
     headers: buildHeaders(),
-    cache: "no-store",
+    cache:   "no-store",
+    signal:  AbortSignal.timeout(BCRA_TIMEOUT_MS),
   });
 
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
@@ -109,7 +129,7 @@ async function bcraFetch<T>(path: string): Promise<T | null> {
   try {
     return await bcraProbe<T>(path);
   } catch (err) {
-    console.log(`[BCRA] GET ${path} → ERROR ${(err as Error).message}`);
+    console.log(`[BCRA] GET ${path} → ERROR ${describeError(err)}`);
     return null;
   }
 }
@@ -247,8 +267,7 @@ export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileR
     } catch (err) {
       // Network/timeout error — do NOT continue to next prefix.
       // Treating this as "not found" would cache a false Estado A.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log(`[BCRA] ERROR de red en /Deudas/${cuil}: ${msg} — abortando búsqueda, API posiblemente caída`);
+      console.log(`[BCRA] ERROR de red en /Deudas/${cuil}: ${describeError(err)} — abortando búsqueda`);
       throw err;
     }
 
