@@ -1,7 +1,7 @@
 export const preferredRegion = 'gru1'; // São Paulo — IPs not blocked by BCRA WAF
 
 import { redirect } from "next/navigation";
-import { supabase, supabaseAdmin } from "@/lib/supabase";
+import { supabase, getSupabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
@@ -167,7 +167,7 @@ export default async function BusinessDashboard(props: {
 
         // Audit log — service_role bypasses RLS so this never silently fails.
         try {
-          const { error: histError } = await (supabaseAdmin as any)
+          const { error: histError } = await (getSupabaseAdmin() as any)
             .from("search_history")
             .insert({
               company_id:   company.id,
