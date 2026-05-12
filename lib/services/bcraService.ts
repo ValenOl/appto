@@ -81,10 +81,10 @@ interface BcraApiResponse<T> {
 
 function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Accept":       "application/json",
-    // Some government APIs drop connections from data-center IPs with no User-Agent.
-    "User-Agent":   "APPTO/1.0 (Central de Deudores client)",
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "es-AR,es;q=0.9",
+    "Referer":         "https://www.bcra.gob.ar/",
   };
   const token = process.env.BCRA_API_TOKEN;
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -107,6 +107,7 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
   // No try/catch — network errors (DNS failure, ECONNREFUSED, SSL, timeout)
   // propagate as thrown exceptions so callers can distinguish them from a 404.
   // AbortSignal.timeout() fires a TimeoutError after BCRA_TIMEOUT_MS ms.
+  console.log(`[BCRA] Request enviada con headers de navegación → ${path}`);
   const res = await fetch(`${BCRA_BASE}${path}`, {
     headers: buildHeaders(),
     cache:   "no-store",
