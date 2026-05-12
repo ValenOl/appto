@@ -66,41 +66,43 @@ export default async function HistoryPage() {
         </div>
       ) : (
         <div className="border border-slate-200 bg-white overflow-hidden">
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-8 px-8 py-4 border-b border-slate-100 bg-slate-50">
-            <span className="text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">Denominación</span>
-            <span className="text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase text-right">CUIT / DNI</span>
-            <span className="text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase text-right">Score ΛPPTO</span>
-            <span className="text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase text-right">Fecha</span>
-          </div>
-
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="grid grid-cols-[1fr_auto_auto_auto] gap-x-8 px-8 py-5 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50 transition-colors"
-            >
-              <span className="text-sm font-black text-slate-900 truncate">
-                {row.full_name || "—"}
-              </span>
-              <span
-                className="text-xs font-light text-slate-400 tracking-widest text-right"
-                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-              >
-                {row.query_target}
-              </span>
-              <span className="text-sm font-black text-slate-900 text-right tabular-nums">
-                {row.result_score ?? "—"}
-                {row.result_score != null && (
-                  <span className="text-[10px] font-light text-slate-400"> / 1000</span>
-                )}
-              </span>
-              <span
-                className="text-[10px] font-light text-slate-400 tracking-widest text-right"
-                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-              >
-                {formatDate(row.created_at)}
-              </span>
-            </div>
-          ))}
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-8 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">Denominación</th>
+                <th className="px-8 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase w-40">CUIT / DNI</th>
+                <th className="px-8 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase w-32">Score ΛPPTO</th>
+                <th className="px-8 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase w-36">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                  <td className="px-8 py-5 text-sm font-black text-slate-900 truncate max-w-0">
+                    {row.full_name || <span className="font-light text-slate-300">—</span>}
+                  </td>
+                  <td
+                    className="px-8 py-5 text-xs font-light text-slate-400 tracking-widest text-right"
+                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                  >
+                    {row.query_target}
+                  </td>
+                  <td className="px-8 py-5 text-sm font-black text-slate-900 text-right tabular-nums">
+                    {row.result_score ?? <span className="font-light text-slate-300">—</span>}
+                    {row.result_score != null && (
+                      <span className="text-[10px] font-light text-slate-400"> / 1000</span>
+                    )}
+                  </td>
+                  <td
+                    className="px-8 py-5 text-[10px] font-light text-slate-400 tracking-widest text-right"
+                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                  >
+                    {formatDate(row.created_at)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
