@@ -1,4 +1,4 @@
-export const preferredRegion = 'gru1'; // São Paulo — IPs not blocked by BCRA WAF
+export const preferredRegion = 'iad1'; // Washington DC — failover after gru1 block
 
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";

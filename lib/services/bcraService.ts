@@ -6,6 +6,24 @@ import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 const BCRA_BASE        = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
 const BCRA_TIMEOUT_MS  = 10_000;
 
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+] as const;
+
+function randomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+function jitter(): Promise<void> {
+  const ms = 500 + Math.floor(Math.random() * 1000); // 500–1500ms
+  console.log(`[BCRA] Jitter: esperando ${ms}ms antes del request`);
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 // ── BCRA API response types ───────────────────────────────────────────────
 // Documented at: https://www.bcra.gob.ar/BCRAyVos/Sistemas_Financieros.asp
 
@@ -81,7 +99,7 @@ interface BcraApiResponse<T> {
 
 function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
-    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent":      randomUserAgent(),
     "Accept":          "application/json, text/plain, */*",
     "Accept-Language": "es-AR,es;q=0.9",
     "Referer":         "https://www.bcra.gob.ar/",
@@ -107,6 +125,7 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
   // No try/catch — network errors (DNS failure, ECONNREFUSED, SSL, timeout)
   // propagate as thrown exceptions so callers can distinguish them from a 404.
   // AbortSignal.timeout() fires a TimeoutError after BCRA_TIMEOUT_MS ms.
+  await jitter();
   console.log(`[BCRA] Request enviada con headers de navegación → ${path}`);
   const res = await fetch(`${BCRA_BASE}${path}`, {
     headers: buildHeaders(),
@@ -116,7 +135,12 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
 
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    if (res.status !== 404) {
+      console.error(`[BCRA CRITICAL] Bloqueo detectado: ${res.status} en ${path}`);
+    }
+    return null;
+  }
 
   const json: BcraApiResponse<T> = await res.json();
 
