@@ -944,14 +944,10 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
         )}
       </div>
 
-      {/* ── DISCLAIMER ── */}
-      <div id="page-footer" className="bg-slate-100 rounded-2xl px-8 py-6 mb-4">
-        <p className="text-xs font-light text-slate-500 leading-relaxed">
-          <span className="font-black text-slate-600">[ i ]</span>{" "}
-          La información presentada es de carácter referencial y no constituye una
-          recomendación financiera. Los datos provienen de fuentes públicas y
-          colaborativas verificadas. ΛPPTO no se responsabiliza por decisiones
-          crediticias tomadas exclusivamente en base a este reporte.
+      {/* ── AVISO LEGAL ── */}
+      <div id="page-footer" className="px-1 pb-6 mt-2">
+        <p className="text-xs text-neutral-500 uppercase tracking-wide leading-relaxed">
+          LOS DATOS EXHIBIDOS PROVIENEN DE CONSULTAS AUTOMATIZADAS A FUENTES DE ACCESO PÚBLICO. ΛPPTO NO ALTERA, VALIDA NI GARANTIZA LA ACTUALIZACIÓN EN TIEMPO REAL DE DICHOS REGISTROS. ESTE REPORTE ES DE CARÁCTER ESTRICTAMENTE INFORMATIVO.
         </p>
       </div>
     </>
