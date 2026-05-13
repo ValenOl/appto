@@ -1,51 +1,51 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import {
+  queryBcra,
+  type BcraDeudaResults,
+  type BcraEntidad,
+  type QueryOutcome,
+} from '@/app/actions/bcraCache';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Entity code → display name map ──────────────────────────────────────────
+// Primary source is always BcraEntidad.descripcion (BCRA sends the name).
+// This map is a fallback for codes with empty/missing descripcion.
 
-interface BcraEntidad {
-  entidad:               number;
-  descripcion:           string;
-  situacion:             number;
-  fechaSit1:             string;
-  monto:                 number;   // miles de ARS
-  diasAtrasoPago:        number;
-  refinanciaciones:      boolean;
-  recategorizacionOblig: boolean;
-  situacionJuridica:     boolean;
-  irrecuperable:         boolean;
-  enRevision:            boolean;
-  procesoJud:            boolean;
+const ENTIDAD_MAP: Record<number, string> = {
+  7:   'Banco Galicia',
+  11:  'Banco Santander',
+  14:  'Banco Nación Argentina',
+  15:  'BBVA Argentina',
+  16:  'Citibank N.A.',
+  17:  'HSBC Bank Argentina',
+  20:  'Banco Provincia de Bs. As.',
+  27:  'Itaú Argentina',
+  29:  'Banco Patagonia',
+  34:  'Banco Hipotecario',
+  44:  'Banco Macro',
+  45:  'ICBC Argentina',
+  65:  'Banco Ciudad de Buenos Aires',
+  72:  'Banco Comafi',
+  83:  'Banco Credicoop',
+  86:  'BICE',
+  93:  'Banco CMF',
+  94:  'Banco de San Juan',
+  97:  'Banco del Chubut',
+  119: 'Banco de la Pampa',
+  147: 'Brubank',
+  150: 'Naranja X',
+  151: 'Mercado Pago',
+};
+
+function resolveEntityName(e: BcraEntidad): string {
+  if (e.descripcion?.trim()) return e.descripcion.trim();
+  return ENTIDAD_MAP[e.entidad] ?? `Entidad ${e.entidad}`;
 }
 
-interface BcraPeriodo {
-  periodo:   string;               // "YYYY-MM"
-  entidades: BcraEntidad[];
-}
+// ─── Situation labels ─────────────────────────────────────────────────────────
 
-interface BcraDeudaResults {
-  identificacion: number;
-  denominacion:   string;
-  periodos:       BcraPeriodo[];
-}
-
-interface BcraApiResponse {
-  status:  number;
-  results: BcraDeudaResults;
-}
-
-interface DeudaRow extends BcraEntidad {
-  periodo: string;
-}
-
-type QueryStatus = 'idle' | 'loading' | 'found' | 'not-found' | 'error';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PROXY = 'https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra';
-
-const SITUACION: Record<number, string> = {
+const SIT_LABEL: Record<number, string> = {
   1: 'NORMAL',
   2: 'SEGUIMIENTO ESPECIAL',
   3: 'CON PROBLEMAS',
@@ -54,9 +54,9 @@ const SITUACION: Record<number, string> = {
   6: 'IRRECUPERABLE / DISP. TÉC.',
 };
 
-const MONTHS = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const MONTHS = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
 
 function classify(v: string): 'dni' | 'cuit' | null {
   if (v.length === 8)  return 'dni';
@@ -79,6 +79,22 @@ function fmtDate(): string {
     .toUpperCase();
 }
 
+function cacheAge(isoDate: string): string {
+  const diffMs   = Date.now() - new Date(isoDate).getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'HOY';
+  if (diffDays === 1) return 'HACE 1 DÍA';
+  return `HACE ${diffDays} DÍAS`;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DeudaRow extends BcraEntidad {
+  periodo: string;
+}
+
+type Status = 'idle' | 'loading' | QueryOutcome;
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function Bone({ w, h = 'h-3' }: { w: string; h?: string }) {
@@ -93,7 +109,6 @@ function Skeleton() {
         <Bone w="w-64" h="h-7" />
         <Bone w="w-40" />
       </div>
-
       <div className="grid grid-cols-3 divide-x divide-zinc-800">
         {[0, 1, 2].map((i) => (
           <div key={i} className="px-7 py-5 flex flex-col gap-2.5">
@@ -102,7 +117,6 @@ function Skeleton() {
           </div>
         ))}
       </div>
-
       <div className="border-t border-zinc-800">
         <div className="px-7 py-4 border-b border-zinc-800">
           <Bone w="w-44" />
@@ -110,11 +124,11 @@ function Skeleton() {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="px-7 py-5 border-b border-zinc-800 last:border-0 grid grid-cols-[1fr_100px_52px_120px] gap-x-4 items-center"
+            className="px-7 py-5 border-b border-zinc-800 last:border-0 grid grid-cols-[1fr_108px_56px_128px] gap-x-4 items-center"
           >
             <div className="flex flex-col gap-2">
               <Bone w="w-44" />
-              <Bone w="w-24" />
+              <Bone w="w-28" />
             </div>
             <Bone w="w-full" />
             <Bone w="w-6" />
@@ -126,14 +140,15 @@ function Skeleton() {
   );
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function RiskQuery() {
-  const [raw,    setRaw]    = useState('');
-  const [status, setStatus] = useState<QueryStatus>('idle');
-  const [data,   setData]   = useState<BcraDeudaResults | null>(null);
-  const [errMsg, setErrMsg] = useState('');
-  const inputRef            = useRef<HTMLInputElement>(null);
+  const [raw,       setRaw]       = useState('');
+  const [status,    setStatus]    = useState<Status>('idle');
+  const [data,      setData]      = useState<BcraDeudaResults | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [errMsg,    setErrMsg]    = useState('');
+  const inputRef                  = useRef<HTMLInputElement>(null);
 
   const digits    = raw.replace(/\D/g, '');
   const inputType = classify(digits);
@@ -142,30 +157,25 @@ export default function RiskQuery() {
     if (!inputType) return;
     setStatus('loading');
     setData(null);
+    setFetchedAt(null);
     setErrMsg('');
 
-    try {
-      const endpoint = `/centraldedeudores/v1.0/Deudas/${digits}`;
-      const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
-      const res      = await fetch(url, { cache: 'no-store' });
+    const result = await queryBcra(digits);
 
-      if (res.status === 404)  { setStatus('not-found'); return; }
-      if (!res.ok)             throw new Error(`HTTP ${res.status}`);
+    setFetchedAt(result.fetchedAt);
 
-      const json: BcraApiResponse = await res.json();
-      if (json.status !== 200 || !json.results) { setStatus('not-found'); return; }
-
-      setData(json.results);
-      setStatus('found');
-    } catch (e) {
-      setErrMsg(e instanceof Error ? e.message : 'Error desconocido');
-      setStatus('error');
+    if (result.outcome === 'error') {
+      setErrMsg(result.error ?? 'Error desconocido');
     }
+
+    setData(result.data);
+    setStatus(result.outcome);
   }, [digits, inputType]);
 
   function reset() {
     setStatus('idle');
     setData(null);
+    setFetchedAt(null);
     setRaw('');
     setTimeout(() => inputRef.current?.focus(), 40);
   }
@@ -176,6 +186,7 @@ export default function RiskQuery() {
 
   const worstSit   = rows.length ? Math.max(...rows.map((r) => r.situacion)) : 1;
   const totalMonto = rows.reduce((acc, r) => acc + r.monto, 0);
+  const fromCache  = status === 'cached';
 
   return (
     <div
@@ -251,7 +262,7 @@ export default function RiskQuery() {
             </button>
           </div>
 
-          {/* Type hint */}
+          {/* Input type indicator */}
           <div className="flex items-center gap-5 h-4">
             {digits.length > 0 && (
               <>
@@ -280,7 +291,8 @@ export default function RiskQuery() {
           </div>
         </section>
 
-        {/* ── IDLE ── */}
+        {/* ── STATES ── */}
+
         {status === 'idle' && (
           <div className="border border-zinc-800 px-8 py-16 flex flex-col gap-4">
             <span className="text-[10px] font-bold tracking-[0.4em] text-zinc-700 uppercase">
@@ -292,53 +304,41 @@ export default function RiskQuery() {
               <span className="text-zinc-700 font-light">PARA INICIAR AUDITORÍA</span>
             </h2>
             <p className="text-sm font-light text-zinc-600 max-w-xs leading-relaxed mt-2">
-              Consulta en tiempo real la Central de Deudores del Banco Central de la
-              República Argentina.
+              Consulta en tiempo real la Central de Deudores del BCRA.
+              Los resultados se cachean por 30 días.
             </p>
           </div>
         )}
 
-        {/* ── LOADING ── */}
         {status === 'loading' && <Skeleton />}
 
-        {/* ── NOT FOUND ── */}
         {status === 'not-found' && (
           <div className="border border-zinc-800 px-8 py-12 flex flex-col gap-3">
             <span className="text-[10px] font-bold tracking-[0.4em] text-zinc-600 uppercase">
               SIN REGISTROS
             </span>
-            <p className="text-2xl font-black text-white tracking-tight">
-              PERFIL NO ENCONTRADO
-            </p>
+            <p className="text-2xl font-black tracking-tight">PERFIL NO ENCONTRADO</p>
             <p className="text-sm font-light text-zinc-500 max-w-sm leading-relaxed">
               El identificador{' '}
-              <span
-                className="font-bold text-zinc-300 tracking-widest"
-                style={{ fontFamily: 'var(--font-mono, monospace)' }}
-              >
+              <span className="font-bold text-zinc-300 tracking-widest" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                 {digits}
               </span>{' '}
               no registra actividad en la Central de Deudores del BCRA en los últimos 24 meses.
             </p>
             <p className="text-xs text-zinc-700 border-l border-zinc-800 pl-4 mt-2 leading-relaxed">
-              Verificá que el número sea correcto. No se descontó ningún crédito de tu cuota.
+              Verificá que el número sea correcto.
             </p>
             <ResetBtn onClick={reset} />
           </div>
         )}
 
-        {/* ── ERROR ── */}
         {status === 'error' && (
           <div className="border border-zinc-800 px-8 py-12 flex flex-col gap-3">
             <span className="text-[10px] font-bold tracking-[0.4em] text-zinc-600 uppercase">
               ERROR DE CONEXIÓN
             </span>
-            <p className="text-2xl font-black text-white tracking-tight">
-              API NO DISPONIBLE
-            </p>
-            <p className="text-sm font-light text-zinc-500 max-w-sm leading-relaxed">
-              {errMsg}
-            </p>
+            <p className="text-2xl font-black tracking-tight">API NO DISPONIBLE</p>
+            <p className="text-sm font-light text-zinc-500 max-w-sm leading-relaxed">{errMsg}</p>
             <p className="text-xs text-zinc-700 border-l border-zinc-800 pl-4 mt-2">
               El proxy del BCRA puede estar temporalmente inaccesible. Reintentá en unos minutos.
             </p>
@@ -346,13 +346,14 @@ export default function RiskQuery() {
           </div>
         )}
 
-        {/* ── FOUND ── */}
-        {status === 'found' && data && (
+        {(status === 'fresh' || status === 'cached') && data && (
           <Results
             data={data}
             rows={rows}
             worstSit={worstSit}
             totalMonto={totalMonto}
+            fromCache={fromCache}
+            fetchedAt={fetchedAt}
             onReset={reset}
           />
         )}
@@ -369,12 +370,16 @@ function Results({
   rows,
   worstSit,
   totalMonto,
+  fromCache,
+  fetchedAt,
   onReset,
 }: {
   data:       BcraDeudaResults;
   rows:       DeudaRow[];
   worstSit:   number;
   totalMonto: number;
+  fromCache:  boolean;
+  fetchedAt:  string | null;
   onReset:    () => void;
 }) {
   return (
@@ -382,19 +387,39 @@ function Results({
 
       {/* Profile card */}
       <div className="border border-zinc-800">
+
+        {/* Name header */}
         <div className="px-7 py-6 border-b border-zinc-800">
-          <span className="text-[9px] font-bold tracking-[0.4em] text-zinc-600 uppercase block mb-2">
-            DENOMINACIÓN
-          </span>
-          <h1 className="text-3xl font-black text-white tracking-tight leading-tight">
-            {data.denominacion}
-          </h1>
-          <span
-            className="text-xs tracking-[0.15em] text-zinc-600 mt-2 block"
-            style={{ fontFamily: 'var(--font-mono, monospace)' }}
-          >
-            ID: {data.identificacion}
-          </span>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-bold tracking-[0.4em] text-zinc-600 uppercase">
+                DENOMINACIÓN
+              </span>
+              <h1 className="text-3xl font-black text-white tracking-tight leading-tight">
+                {data.denominacion}
+              </h1>
+              <span
+                className="text-xs tracking-[0.15em] text-zinc-600"
+                style={{ fontFamily: 'var(--font-mono, monospace)' }}
+              >
+                ID: {data.identificacion}
+              </span>
+            </div>
+
+            {/* Cache / freshness badge */}
+            <span
+              className={`shrink-0 self-start text-[9px] font-bold tracking-[0.25em] uppercase px-3 py-1.5 border ${
+                fromCache
+                  ? 'border-zinc-700 text-zinc-600'
+                  : 'border-zinc-600 text-zinc-400'
+              }`}
+              style={{ fontFamily: 'var(--font-mono, monospace)' }}
+            >
+              {fromCache
+                ? `CACHÉ · ${fetchedAt ? cacheAge(fetchedAt) : '30D'}`
+                : 'BCRA · AHORA'}
+            </span>
+          </div>
         </div>
 
         {/* Summary strip */}
@@ -402,7 +427,7 @@ function Results({
           <StatCell
             label="PEOR SITUACIÓN"
             value={String(worstSit)}
-            sub={SITUACION[worstSit]}
+            sub={SIT_LABEL[worstSit]}
             highlight={worstSit > 1}
           />
           <StatCell
@@ -417,7 +442,7 @@ function Results({
         </div>
       </div>
 
-      {/* Risk alert — only when situation > 1 */}
+      {/* Risk alert — only shown when situation > 1 */}
       {worstSit > 1 && (
         <div className="border border-zinc-500 px-7 py-5 flex flex-col gap-1.5">
           <span className="text-[9px] font-bold tracking-[0.4em] text-zinc-400 uppercase">
@@ -426,7 +451,7 @@ function Results({
           <p className="text-sm font-light text-zinc-400 leading-relaxed max-w-xl">
             Este perfil registra al menos una entidad en{' '}
             <span className="font-black text-white">
-              SITUACIÓN {worstSit} — {SITUACION[worstSit]}
+              SITUACIÓN {worstSit} — {SIT_LABEL[worstSit]}
             </span>
             . Se recomienda análisis adicional antes de aprobar operaciones con este perfil.
           </p>
@@ -449,9 +474,9 @@ function Results({
             </span>
           </div>
 
-          {/* Header row */}
+          {/* Column headers */}
           <div className="grid grid-cols-[1fr_108px_56px_128px] gap-x-4 px-7 py-3 bg-zinc-950 border-b border-zinc-800">
-            <ColHead>ENTIDAD</ColHead>
+            <ColHead>ENTIDAD FINANCIERA</ColHead>
             <ColHead right>PERÍODO</ColHead>
             <ColHead right>SIT.</ColHead>
             <ColHead right>MONTO (ARS)</ColHead>
@@ -459,7 +484,9 @@ function Results({
 
           {/* Data rows */}
           {rows.map((row, i) => {
-            const isRisk = row.situacion > 1;
+            const isRisk    = row.situacion > 1;
+            const isCritical = row.situacion >= 4;
+
             return (
               <div
                 key={i}
@@ -469,28 +496,37 @@ function Results({
                   ${isRisk ? 'border-l-2 border-l-zinc-500 pl-[26px]' : ''}
                 `}
               >
-                {/* Entity */}
+                {/* Entity name + metadata */}
                 <div className="flex flex-col gap-1 min-w-0 pr-2">
-                  <span className={`text-sm leading-snug ${isRisk ? 'font-black text-white' : 'font-light text-zinc-300'}`}>
-                    {row.descripcion || <span className="text-zinc-700">—</span>}
+                  <span className={`text-sm leading-snug ${isRisk ? 'font-bold text-white' : 'font-light text-zinc-300'}`}>
+                    {resolveEntityName(row)}
                   </span>
-                  {row.diasAtrasoPago > 0 && (
-                    <span
-                      className="text-[10px] text-zinc-600 tracking-widest"
-                      style={{ fontFamily: 'var(--font-mono, monospace)' }}
-                    >
-                      {row.diasAtrasoPago}d ATRASO
-                    </span>
-                  )}
-                  {row.procesoJud && (
-                    <span className="text-[9px] font-bold tracking-[0.2em] text-zinc-600 uppercase">
-                      PROCESO JUDICIAL
-                    </span>
-                  )}
-                  {row.situacionJuridica && !row.procesoJud && (
-                    <span className="text-[9px] font-bold tracking-[0.2em] text-zinc-600 uppercase">
-                      SITUACIÓN JURÍDICA
-                    </span>
+
+                  {/* Entity code always visible for traceability */}
+                  <span
+                    className="text-[10px] text-zinc-700"
+                    style={{ fontFamily: 'var(--font-mono, monospace)' }}
+                  >
+                    COD. {String(row.entidad).padStart(5, '0')}
+                    {row.diasAtrasoPago > 0 && ` · ${row.diasAtrasoPago}d ATRASO`}
+                  </span>
+
+                  {/* Legal / judicial flags */}
+                  {(isCritical || row.procesoJud || row.situacionJuridica) && (
+                    <div className="flex flex-wrap gap-2 mt-0.5">
+                      {row.procesoJud && (
+                        <Flag>PROCESO JUDICIAL</Flag>
+                      )}
+                      {row.situacionJuridica && !row.procesoJud && (
+                        <Flag>SIT. JURÍDICA</Flag>
+                      )}
+                      {row.irrecuperable && (
+                        <Flag>IRRECUPERABLE</Flag>
+                      )}
+                      {row.refinanciaciones && (
+                        <Flag>REFINANCIACIÓN</Flag>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -503,9 +539,14 @@ function Results({
                 </span>
 
                 {/* Situación */}
-                <span className={`text-sm text-right ${isRisk ? 'font-black text-white' : 'font-light text-zinc-500'}`}>
-                  {row.situacion}
-                </span>
+                <div className="text-right">
+                  <span
+                    className={`text-sm ${isRisk ? 'font-black text-white' : 'font-light text-zinc-500'}`}
+                    title={SIT_LABEL[row.situacion]}
+                  >
+                    {row.situacion}
+                  </span>
+                </div>
 
                 {/* Monto */}
                 <span
@@ -517,6 +558,21 @@ function Results({
               </div>
             );
           })}
+
+          {/* Totals row */}
+          <div className="grid grid-cols-[1fr_108px_56px_128px] gap-x-4 px-7 py-4 bg-zinc-950 border-t border-zinc-800">
+            <span className="text-[9px] font-bold tracking-[0.3em] text-zinc-600 uppercase">
+              TOTAL DEUDA DECLARADA
+            </span>
+            <span />
+            <span />
+            <span
+              className="text-sm font-black text-white text-right tabular-nums"
+              style={{ fontFamily: 'var(--font-mono, monospace)' }}
+            >
+              $ {fmtMonto(totalMonto)}
+            </span>
+          </div>
         </div>
       ) : (
         <div className="border border-zinc-800 px-7 py-10 flex flex-col gap-2">
@@ -529,11 +585,37 @@ function Results({
         </div>
       )}
 
+      {/* Situación reference table */}
+      <details className="border border-zinc-800 group">
+        <summary className="px-7 py-4 text-[10px] font-bold tracking-[0.35em] text-zinc-600 uppercase cursor-pointer select-none list-none hover:text-zinc-400 transition-colors">
+          REFERENCIA DE SITUACIONES BCRA
+        </summary>
+        <div className="border-t border-zinc-800">
+          {Object.entries(SIT_LABEL).map(([num, label]) => {
+            const n = Number(num);
+            return (
+              <div key={n} className="grid grid-cols-[56px_1fr] gap-4 px-7 py-3 border-b border-zinc-900 last:border-0">
+                <span
+                  className={`text-sm tabular-nums ${n > 1 ? 'font-black text-white' : 'font-light text-zinc-500'}`}
+                  style={{ fontFamily: 'var(--font-mono, monospace)' }}
+                >
+                  SIT. {n}
+                </span>
+                <span className={`text-sm ${n > 1 ? 'font-light text-zinc-400' : 'font-light text-zinc-600'}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+
       {/* Footer */}
       <div className="flex items-start justify-between gap-6 pt-1">
         <p className="text-[9px] font-light text-zinc-700 leading-relaxed max-w-sm uppercase tracking-wide">
-          Datos provenientes de la Central de Deudores del BCRA. Carácter exclusivamente informativo.
-          Fuente: api.bcra.gob.ar
+          Datos provenientes de la Central de Deudores del BCRA (api.bcra.gob.ar).
+          Carácter exclusivamente informativo.
+          {fromCache && fetchedAt && ` Última actualización: ${new Date(fetchedAt).toLocaleDateString('es-AR')}.`}
         </p>
         <ResetBtn onClick={onReset} />
       </div>
@@ -580,6 +662,14 @@ function StatCell({
 function ColHead({ children, right = false }: { children: React.ReactNode; right?: boolean }) {
   return (
     <span className={`text-[9px] font-bold tracking-[0.3em] text-zinc-700 uppercase ${right ? 'text-right' : ''}`}>
+      {children}
+    </span>
+  );
+}
+
+function Flag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[9px] font-bold tracking-[0.15em] text-zinc-600 border border-zinc-800 px-2 py-0.5 uppercase">
       {children}
     </span>
   );

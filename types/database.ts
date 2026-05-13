@@ -4,6 +4,10 @@ export interface DebtEntry {
   monto:       number
 }
 
+// Used as jsonb column type for consultas_bcra.payload
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Json = string | number | boolean | null | { [key: string]: Json } | Json[]
+
 export type Database = {
   public: {
     Tables: {
@@ -134,6 +138,27 @@ export type Database = {
           profile_id?: string
           content?:    string
           created_at?: string
+        }
+      }
+
+      consultas_bcra: {
+        Row: {
+          id:            string
+          identificador: string
+          payload:       Json
+          fetched_at:    string
+        }
+        Insert: {
+          id?:           string
+          identificador: string
+          payload:       Json
+          fetched_at?:   string
+        }
+        Update: {
+          id?:            string
+          identificador?: string
+          payload?:       Json
+          fetched_at?:    string
         }
       }
 
