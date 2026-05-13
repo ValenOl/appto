@@ -51,14 +51,14 @@ async function readCache(identificador: string): Promise<{ payload: BcraDeudaRes
 
   const { data } = await supabase
     .from('consultas_bcra')
-    .select('payload, fetched_at')
+    .select('*')
     .eq('identificador', identificador)
     .gte('fetched_at', cutoff)
     .maybeSingle();
 
   if (!data?.payload) return null;
   return {
-    payload:   data.payload as unknown as BcraDeudaResults,
+    payload:   data.payload as BcraDeudaResults,
     fetchedAt: data.fetched_at,
   };
 }
@@ -71,7 +71,7 @@ async function writeCache(identificador: string, payload: BcraDeudaResults): Pro
       .upsert(
         {
           identificador,
-          payload: payload as unknown as import('@/types/database').Json,
+          payload: payload as unknown,
           fetched_at: new Date().toISOString(),
         },
         { onConflict: 'identificador' }
