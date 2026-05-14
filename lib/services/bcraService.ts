@@ -3,20 +3,11 @@ import type { Profile, DebtEntry } from "@/types/database";
 import { calculateApptoScore } from "@/lib/utils/scoring";
 import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
-const BCRA_BASE        = "https://api.bcra.gob.ar/centraldedeudores/v1.0";
-const BCRA_TIMEOUT_MS  = 10_000;
-
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-] as const;
-
-function randomUserAgent(): string {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
+// Requests go through the Cloudflare proxy — the BCRA API blocks Vercel's
+// US-based IPs with 503. The proxy routes through a different egress point.
+const BCRA_PROXY         = "https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra";
+const BCRA_ENDPOINT_BASE = "/centraldedeudores/v1.0";
+const BCRA_TIMEOUT_MS    = 12_000;
 
 function jitter(): Promise<void> {
   const ms = 500 + Math.floor(Math.random() * 1000); // 500–1500ms
@@ -97,21 +88,6 @@ interface BcraApiResponse<T> {
 //                on any failure. Use for secondary endpoints (historial, cheques)
 //                where partial data is acceptable.
 
-function buildHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "User-Agent":      randomUserAgent(),
-    "Accept":          "application/json, text/plain, */*",
-    "Accept-Language": "es-AR,es;q=0.9",
-    "Referer":         "https://www.bcra.gob.ar/",
-  };
-  const token = process.env.BCRA_API_TOKEN;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-}
-
-// Extracts the full error description including the underlying cause that
-// Node.js / undici wraps inside err.cause (e.g. ECONNREFUSED, CERT_HAS_EXPIRED,
-// UNABLE_TO_VERIFY_LEAF_SIGNATURE, timeout, etc.).
 function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   const cause = (err as NodeJS.ErrnoException & { cause?: unknown }).cause;
@@ -122,22 +98,22 @@ function describeError(err: unknown): string {
 }
 
 async function bcraProbe<T>(path: string): Promise<T | null> {
-  // No try/catch — network errors (DNS failure, ECONNREFUSED, SSL, timeout)
-  // propagate as thrown exceptions so callers can distinguish them from a 404.
-  // AbortSignal.timeout() fires a TimeoutError after BCRA_TIMEOUT_MS ms.
+  // No try/catch — network errors propagate so callers can distinguish
+  // "not found" (null) from "API down" (thrown exception).
   await jitter();
-  console.log(`[BCRA] Request enviada con headers de navegación → ${path}`);
-  const res = await fetch(`${BCRA_BASE}${path}`, {
-    headers: buildHeaders(),
-    cache:   "no-store",
-    signal:  AbortSignal.timeout(BCRA_TIMEOUT_MS),
+  const endpoint = `${BCRA_ENDPOINT_BASE}${path}`;
+  const url      = `${BCRA_PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
+  console.log(`[BCRA] Proxy request → ${endpoint}`);
+  const res = await fetch(url, {
+    cache:  "no-store",
+    signal: AbortSignal.timeout(BCRA_TIMEOUT_MS),
   });
 
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
 
   if (!res.ok) {
     if (res.status !== 404) {
-      console.error(`[BCRA CRITICAL] Bloqueo detectado: ${res.status} en ${path}`);
+      console.error(`[BCRA] Error ${res.status} en ${path}`);
     }
     return null;
   }
