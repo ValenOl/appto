@@ -41,7 +41,7 @@ export interface BcraQueryResult {
 
 // ─── Internal constants ───────────────────────────────────────────────────────
 
-const PROXY   = 'https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra';
+const PROXY   = process.env.NEXT_PUBLIC_PROXY_URL ?? 'https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra';
 const TTL_MS  = 30 * 24 * 60 * 60 * 1000;   // 30 days
 
 // ─── Local shape for cache rows ───────────────────────────────────────────────
@@ -112,8 +112,9 @@ export async function queryBcra(identifier: string): Promise<BcraQueryResult> {
     const endpoint = `/centraldedeudores/v1.0/Deudas/${identifier}`;
     const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
     const res      = await fetch(url, {
-      cache:  'no-store',
-      signal: AbortSignal.timeout(12_000),
+      cache:   'no-store',
+      signal:  AbortSignal.timeout(12_000),
+      headers: { 'bypass-tunnel-reminder': 'true' },
     });
 
     if (res.status === 404) {

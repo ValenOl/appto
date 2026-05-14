@@ -5,7 +5,9 @@ import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
 // Requests go through the Cloudflare proxy — the BCRA API blocks Vercel's
 // US-based IPs with 503. The proxy routes through a different egress point.
-const BCRA_PROXY         = "https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra";
+// bypass-tunnel-reminder header is required: without it trycloudflare.com
+// returns a Cloudflare interstitial HTML page instead of the API response.
+const BCRA_PROXY         = process.env.NEXT_PUBLIC_PROXY_URL ?? "https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra";
 const BCRA_ENDPOINT_BASE = "/centraldedeudores/v1.0";
 const BCRA_TIMEOUT_MS    = 12_000;
 
@@ -105,8 +107,9 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
   const url      = `${BCRA_PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
   console.log(`[BCRA] Proxy request → ${endpoint}`);
   const res = await fetch(url, {
-    cache:  "no-store",
-    signal: AbortSignal.timeout(BCRA_TIMEOUT_MS),
+    cache:   "no-store",
+    signal:  AbortSignal.timeout(BCRA_TIMEOUT_MS),
+    headers: { "bypass-tunnel-reminder": "true" },
   });
 
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
