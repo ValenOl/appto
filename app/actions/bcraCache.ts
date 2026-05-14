@@ -44,40 +44,47 @@ export interface BcraQueryResult {
 const PROXY   = 'https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra';
 const TTL_MS  = 30 * 24 * 60 * 60 * 1000;   // 30 days
 
+// ─── Local shape for cache rows ───────────────────────────────────────────────
+// We bypass the Database generic here (same pattern used across the codebase)
+// because Supabase's GetResult machinery produces `never` for jsonb columns
+// typed as `unknown` in the Database definition.
+
+interface CacheRow {
+  payload:    BcraDeudaResults;
+  fetched_at: string;
+}
+
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
 async function readCache(identificador: string): Promise<{ payload: BcraDeudaResults; fetchedAt: string } | null> {
   const cutoff = new Date(Date.now() - TTL_MS).toISOString();
 
-  const { data } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
     .from('consultas_bcra')
-    .select('*')
+    .select('payload, fetched_at')
     .eq('identificador', identificador)
     .gte('fetched_at', cutoff)
-    .maybeSingle();
+    .maybeSingle() as { data: CacheRow | null };
 
   if (!data?.payload) return null;
   return {
-    payload:   data.payload as BcraDeudaResults,
+    payload:   data.payload,
     fetchedAt: data.fetched_at,
   };
 }
 
 async function writeCache(identificador: string, payload: BcraDeudaResults): Promise<void> {
   try {
-    const admin = getSupabaseAdmin();
-    await admin
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (getSupabaseAdmin() as any)
       .from('consultas_bcra')
       .upsert(
-        {
-          identificador,
-          payload: payload as unknown,
-          fetched_at: new Date().toISOString(),
-        },
+        { identificador, payload, fetched_at: new Date().toISOString() },
         { onConflict: 'identificador' }
       );
   } catch (e) {
-    // Non-fatal — cache write failure doesn't block the response
+    // Non-fatal — component still returns data; next request re-fetches from BCRA
     console.warn('[ΛPPTO] Cache write failed:', e instanceof Error ? e.message : e);
   }
 }
