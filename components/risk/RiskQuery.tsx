@@ -147,8 +147,9 @@ export default function RiskQuery() {
   const [status,    setStatus]    = useState<Status>('idle');
   const [data,      setData]      = useState<BcraDeudaResults | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [errMsg,    setErrMsg]    = useState('');
-  const inputRef                  = useRef<HTMLInputElement>(null);
+  const [errMsg,       setErrMsg]       = useState('');
+  const [resolvedCuil, setResolvedCuil] = useState<string | null>(null);
+  const inputRef                        = useRef<HTMLInputElement>(null);
 
   const digits    = raw.replace(/\D/g, '');
   const inputType = classify(digits);
@@ -163,6 +164,7 @@ export default function RiskQuery() {
     const result = await queryBcra(digits);
 
     setFetchedAt(result.fetchedAt);
+    setResolvedCuil(result.resolvedCuil);
 
     if (result.outcome === 'error') {
       setErrMsg(result.error ?? 'Error desconocido');
@@ -176,6 +178,7 @@ export default function RiskQuery() {
     setStatus('idle');
     setData(null);
     setFetchedAt(null);
+    setResolvedCuil(null);
     setRaw('');
     setTimeout(() => inputRef.current?.focus(), 40);
   }
@@ -312,22 +315,35 @@ export default function RiskQuery() {
 
         {status === 'loading' && <Skeleton />}
 
-        {status === 'not-found' && (
-          <div className="border border-zinc-800 px-8 py-12 flex flex-col gap-3">
-            <span className="text-[10px] font-bold tracking-[0.4em] text-zinc-600 uppercase">
-              SIN REGISTROS
+        {status === 'clean' && (
+          <div className="border border-zinc-800 px-8 py-12 flex flex-col gap-4">
+            <span className="text-[10px] font-bold tracking-[0.4em] text-zinc-500 uppercase">
+              AUDITORÍA EXITOSA
             </span>
-            <p className="text-2xl font-black tracking-tight">PERFIL NO ENCONTRADO</p>
-            <p className="text-sm font-light text-zinc-500 max-w-sm leading-relaxed">
-              El identificador{' '}
-              <span className="font-bold text-zinc-300 tracking-widest" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+            <p className="text-2xl font-black tracking-tight text-white">
+              SIN DEUDAS EN BCRA
+            </p>
+            <p className="text-sm font-light text-zinc-400 max-w-sm leading-relaxed">
+              El sujeto identificado como{' '}
+              <span
+                className="font-bold text-zinc-200 tracking-widest"
+                style={{ fontFamily: 'var(--font-mono, monospace)' }}
+              >
                 {digits}
               </span>{' '}
-              no registra actividad en la Central de Deudores del BCRA en los últimos 24 meses.
+              no presenta deudas en la Central de Deudores del BCRA.
             </p>
-            <p className="text-xs text-zinc-700 border-l border-zinc-800 pl-4 mt-2 leading-relaxed">
-              Verificá que el número sea correcto.
+            <p className="text-xs text-zinc-700 border-l border-zinc-800 pl-4 leading-relaxed">
+              Resultado cacheado por 30 días. La próxima consulta actualizará el estado.
             </p>
+            {fetchedAt && (
+              <span
+                className="text-[9px] font-bold tracking-[0.25em] text-zinc-700 border border-zinc-800 px-3 py-1.5 self-start"
+                style={{ fontFamily: 'var(--font-mono, monospace)' }}
+              >
+                BCRA · {fmtDate()}
+              </span>
+            )}
             <ResetBtn onClick={reset} />
           </div>
         )}
@@ -354,6 +370,7 @@ export default function RiskQuery() {
             totalMonto={totalMonto}
             fromCache={fromCache}
             fetchedAt={fetchedAt}
+            resolvedCuil={resolvedCuil}
             onReset={reset}
           />
         )}
@@ -372,15 +389,17 @@ function Results({
   totalMonto,
   fromCache,
   fetchedAt,
+  resolvedCuil,
   onReset,
 }: {
-  data:       BcraDeudaResults;
-  rows:       DeudaRow[];
-  worstSit:   number;
-  totalMonto: number;
-  fromCache:  boolean;
-  fetchedAt:  string | null;
-  onReset:    () => void;
+  data:         BcraDeudaResults;
+  rows:         DeudaRow[];
+  worstSit:     number;
+  totalMonto:   number;
+  fromCache:    boolean;
+  fetchedAt:    string | null;
+  resolvedCuil: string | null;
+  onReset:      () => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -402,7 +421,7 @@ function Results({
                 className="text-xs tracking-[0.15em] text-zinc-600"
                 style={{ fontFamily: 'var(--font-mono, monospace)' }}
               >
-                ID: {data.identificacion}
+                CUIL: {resolvedCuil ?? data.identificacion}
               </span>
             </div>
 
