@@ -9,7 +9,7 @@ import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 const BCRA_PROXY         = process.env.PROXY_URL ?? "";
 const PROXY_API_KEY      = process.env.PROXY_API_KEY ?? "";
 const BCRA_ENDPOINT_BASE = "/centraldedeudores/v1.0";
-const BCRA_TIMEOUT_MS    = 12_000;
+const BCRA_TIMEOUT_MS    = 30_000;
 
 function jitter(): Promise<void> {
   const ms = 500 + Math.floor(Math.random() * 1000); // 500–1500ms
