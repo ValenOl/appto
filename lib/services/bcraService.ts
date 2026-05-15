@@ -118,6 +118,9 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);
 
   if (!res.ok) {
+    if (res.status >= 500) {
+      throw new Error(`[BCRA] Proxy error ${res.status} en ${path}`);
+    }
     if (res.status !== 404) {
       console.error(`[BCRA] Error ${res.status} en ${path}`);
     }
