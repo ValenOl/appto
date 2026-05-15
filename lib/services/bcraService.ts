@@ -3,11 +3,11 @@ import type { Profile, DebtEntry } from "@/types/database";
 import { calculateApptoScore } from "@/lib/utils/scoring";
 import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
-// Requests go through the Cloudflare proxy — the BCRA API blocks Vercel's
-// US-based IPs with 503. The proxy routes through a different egress point.
-// bypass-tunnel-reminder header is required: without it trycloudflare.com
-// returns a Cloudflare interstitial HTML page instead of the API response.
-const BCRA_PROXY         = process.env.NEXT_PUBLIC_PROXY_URL ?? "https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra";
+// Requests go through a self-hosted Fastify proxy on Fly.io (São Paulo, gru).
+// The BCRA API blocks Vercel's US-based IPs with 503/ECONNRESET.
+// The proxy sits on a South American IP and forwards requests transparently.
+const BCRA_PROXY         = process.env.PROXY_URL ?? "";
+const PROXY_API_KEY      = process.env.PROXY_API_KEY ?? "";
 const BCRA_ENDPOINT_BASE = "/centraldedeudores/v1.0";
 const BCRA_TIMEOUT_MS    = 12_000;
 
@@ -102,6 +102,7 @@ function describeError(err: unknown): string {
 async function bcraProbe<T>(path: string): Promise<T | null> {
   // No try/catch — network errors propagate so callers can distinguish
   // "not found" (null) from "API down" (thrown exception).
+  if (!BCRA_PROXY) throw new Error("[BCRA] PROXY_URL no configurado — definir en variables de entorno");
   await jitter();
   const endpoint = `${BCRA_ENDPOINT_BASE}${path}`;
   const url      = `${BCRA_PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
@@ -109,7 +110,9 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
   const res = await fetch(url, {
     cache:   "no-store",
     signal:  AbortSignal.timeout(BCRA_TIMEOUT_MS),
-    headers: { "bypass-tunnel-reminder": "true" },
+    headers: {
+      ...(PROXY_API_KEY && { "x-proxy-key": PROXY_API_KEY }),
+    },
   });
 
   console.log(`[BCRA] GET ${path} → HTTP ${res.status}`);

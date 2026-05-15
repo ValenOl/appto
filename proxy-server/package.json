@@ -1,0 +1,11 @@
+{
+  "name": "appto-bcra-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "fastify": "^5.8.5"
+  }
+}
