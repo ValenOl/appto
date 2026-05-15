@@ -251,7 +251,30 @@ export interface BcraProfileResult {
 // Uses bcraFetch (lenient) — a down endpoint yields null and the others
 // still contribute partial data.
 
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function getCachedProfile(cuit: string): Promise<BcraProfileResult | null> {
+  const cutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
+  const { data } = await (supabase as any)
+    .from('profiles')
+    .select('*')
+    .eq('cuit', cuit)
+    .gte('created_at', cutoff)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  console.log(`[BCRA] Cache hit para ${cuit} (${data.created_at})`);
+  const hasHistoricalActivity =
+    data.bcra_score > 1 || (Array.isArray(data.debt_detail) && data.debt_detail.length > 0);
+
+  return { profile: data as Profile, hasHistoricalActivity };
+}
+
 export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResult | null> {
+  const cached = await getCachedProfile(cuit);
+  if (cached) return cached;
+
   const [deuda, historial, cheques] = await Promise.all([
     bcraFetch<BcraDeudaResults>(`/Deudas/${cuit}`),
     bcraFetch<BcraHistorialResults>(`/Historial/${cuit}`),
@@ -281,6 +304,14 @@ export async function fetchFullBcraReport(cuit: string): Promise<BcraProfileResu
 
 export async function fetchBcraReportByDni(rawDni: string): Promise<BcraProfileResult | null> {
   const paddedDni = rawDni.padStart(8, '0');
+
+  // Check cache for all possible prefixes before hitting BCRA
+  for (const prefix of DNI_PREFIXES) {
+    const cuil = buildCuil(prefix, paddedDni);
+    if (!cuil) continue;
+    const cached = await getCachedProfile(cuil);
+    if (cached) return cached;
+  }
 
   for (const prefix of DNI_PREFIXES) {
     const cuil = buildCuil(prefix, paddedDni);

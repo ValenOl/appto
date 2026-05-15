@@ -43,8 +43,9 @@ export interface BcraQueryResult {
 
 // ─── Internal constants ───────────────────────────────────────────────────────
 
-const PROXY  = process.env.NEXT_PUBLIC_PROXY_URL ?? 'https://monetary-royal-galaxy-fragrances.trycloudflare.com/fetch-bcra';
-const TTL_MS = 30 * 24 * 60 * 60 * 1000;   // 30 days
+const PROXY         = process.env.PROXY_URL ?? '';
+const PROXY_API_KEY = process.env.PROXY_API_KEY ?? '';
+const TTL_MS        = 30 * 24 * 60 * 60 * 1000;   // 30 days
 
 // Written to payload when all CUIL candidates returned 404. Lets us cache
 // "this DNI has no debt" without making an extra API call for 30 days.
@@ -128,8 +129,10 @@ async function fetchDeudas(cuil: string): Promise<FetchResult> {
     const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
     const res      = await fetch(url, {
       cache:   'no-store',
-      signal:  AbortSignal.timeout(12_000),
-      headers: { 'bypass-tunnel-reminder': 'true' },
+      signal:  AbortSignal.timeout(30_000),
+      headers: {
+        ...(PROXY_API_KEY && { 'x-proxy-key': PROXY_API_KEY }),
+      },
     });
 
     if (res.status === 404) return 'not-found';
