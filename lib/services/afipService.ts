@@ -1,9 +1,13 @@
 import { getUvaRate } from "@/lib/utils/uvaRate";
 
 // AFIP Public Padrón API — no authentication required, public access.
-// Endpoint: https://aws.afip.gob.ar/sr-padron/v2/persona/{cuit}
+// Vercel's US-based IPs may be blocked by AFIP (same as BCRA).
+// If PROXY_URL is set, requests are routed through the same Fly.io proxy
+// using the full AFIP URL as the endpoint parameter.
 const AFIP_BASE        = "https://aws.afip.gob.ar/sr-padron/v2/persona";
 const AFIP_TIMEOUT_MS  = 10_000;
+const BCRA_PROXY       = process.env.PROXY_URL ?? "";
+const PROXY_API_KEY    = process.env.PROXY_API_KEY ?? "";
 
 // ── AFIP API types ─────────────────────────────────────────────────────────
 
@@ -86,10 +90,20 @@ export function afipIngresoMensualMax(result: AfipResult): number | null {
 
 export async function fetchAfipData(cuit: string): Promise<AfipResult | null> {
   try {
-    const res = await fetch(`${AFIP_BASE}/${cuit}`, {
+    // Route through proxy if PROXY_URL is set (AFIP may block Vercel US IPs).
+    // The proxy receives the full AFIP URL as the `endpoint` parameter.
+    const fullUrl = `${AFIP_BASE}/${cuit}`;
+    const fetchUrl = BCRA_PROXY
+      ? `${BCRA_PROXY}?endpoint=${encodeURIComponent(fullUrl)}`
+      : fullUrl;
+
+    const res = await fetch(fetchUrl, {
       cache:  "no-store",
       signal: AbortSignal.timeout(AFIP_TIMEOUT_MS),
-      headers: { "Accept": "application/json" },
+      headers: {
+        "Accept": "application/json",
+        ...(BCRA_PROXY && PROXY_API_KEY && { "x-proxy-key": PROXY_API_KEY }),
+      },
     });
 
     console.log(`[AFIP] GET ${cuit} → HTTP ${res.status}`);
