@@ -46,7 +46,7 @@ export default async function SettingsPage(props: {
 
   return (
     <div
-      className="px-10 py-10 max-w-2xl"
+      className="px-10 py-10"
       style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
     >
       {/* Header */}
@@ -59,7 +59,7 @@ export default async function SettingsPage(props: {
         </h1>
       </div>
 
-      {/* Feedback banner */}
+      {/* Feedback banner — full width */}
       {s && SUCCESS[s] && (
         <div className="mb-8 border border-green-200 bg-green-50 px-6 py-4"
              style={{ borderLeft: "3px solid #16a34a" }}>
@@ -73,125 +73,132 @@ export default async function SettingsPage(props: {
         </div>
       )}
 
-      {/* ── DATOS DE LA CUENTA ── */}
-      <SectionLabel label="DATOS DE LA CUENTA" />
-      <div className="border border-slate-200 bg-white flex flex-col divide-y divide-slate-100 mb-8">
-        <DataRow label="Razón Social"      value={company.company_name} />
-        <DataRow label="CUIT"              value={company.cuit} mono />
-        <DataRow label="Plan"              value={company.plan_tier} />
-        <DataRow label="Renovación"        value={formatDate(company.cycle_reset_date)} mono />
-      </div>
+      {/* ── GRILLA DE DOS COLUMNAS ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-0 items-start">
 
-      {/* ── CUOTA DEL CICLO ── */}
-      <SectionLabel label="CUOTA DEL CICLO" />
-      <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-5 mb-8">
-        <div className="flex items-end justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-black tracking-[0.35em] text-slate-300 uppercase">
-              Auditorías usadas
-            </span>
-            <p className="text-lg font-black text-slate-900">
-              {company.queries_used}
-              <span className="text-sm font-light text-slate-400"> / {company.monthly_quota}</span>
+        {/* ── COLUMNA IZQUIERDA: información y estado ── */}
+        <div className="flex flex-col">
+
+          <SectionLabel label="DATOS DE LA CUENTA" />
+          <div className="border border-slate-200 bg-white flex flex-col divide-y divide-slate-100 mb-8">
+            <DataRow label="Razón Social" value={company.company_name} />
+            <DataRow label="CUIT"         value={company.cuit} mono />
+            <DataRow label="Plan"         value={company.plan_tier} />
+            <DataRow label="Renovación"   value={formatDate(company.cycle_reset_date)} mono />
+          </div>
+
+          <SectionLabel label="CUOTA DEL CICLO" />
+          <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-5 mb-8">
+            <div className="flex items-end justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-black tracking-[0.35em] text-slate-300 uppercase">
+                  Auditorías usadas
+                </span>
+                <p className="text-lg font-black text-slate-900">
+                  {company.queries_used}
+                  <span className="text-sm font-light text-slate-400"> / {company.monthly_quota}</span>
+                </p>
+              </div>
+              <span
+                className="text-xs font-light text-slate-400 tracking-widest pb-0.5"
+                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              >
+                {quotaRemaining} restantes
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 h-1.5">
+              <div
+                className="h-1.5 bg-slate-900 transition-all duration-500"
+                style={{ width: `${quotaPercent}%` }}
+              />
+            </div>
+            <p className="text-[10px] font-light text-slate-400 tracking-wide">
+              {quotaPercent}% del ciclo consumido.
+              {quotaPercent >= 90 && (
+                <span className="ml-2 font-black text-slate-700">
+                  Próximo al límite — considerá actualizar tu plan.
+                </span>
+              )}
             </p>
           </div>
-          <span
-            className="text-xs font-light text-slate-400 tracking-widest pb-0.5"
-            style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-          >
-            {quotaRemaining} restantes
-          </span>
-        </div>
-        <div className="w-full bg-slate-100 h-1.5">
-          <div
-            className="h-1.5 bg-slate-900 transition-all duration-500"
-            style={{ width: `${quotaPercent}%` }}
-          />
-        </div>
-        <p className="text-[10px] font-light text-slate-400 tracking-wide">
-          {quotaPercent}% del ciclo consumido.
-          {quotaPercent >= 90 && (
-            <span className="ml-2 font-black text-slate-700">
-              Próximo al límite — considerá actualizar tu plan.
-            </span>
-          )}
-        </p>
-      </div>
 
-      {/* ── CAMBIAR CONTRASEÑA ── */}
-      <SectionLabel label="SEGURIDAD" />
-      <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-6 mb-8">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-black text-slate-900">Cambiar contraseña</p>
-          <p className="text-xs font-light text-slate-400">
-            Mínimo 8 caracteres.
-          </p>
-        </div>
-        <form action={changePassword} className="flex flex-col gap-4">
-          <Field id="password" name="password" label="Nueva contraseña" type="password" />
-          <Field id="confirm"  name="confirm"  label="Confirmar contraseña" type="password" />
-          <div className="flex justify-end pt-2">
-            <SubmitButton label="ACTUALIZAR CONTRASEÑA" />
-          </div>
-        </form>
-      </div>
-
-      {/* ── PERSONALIZACIÓN DEL DICTAMEN ── */}
-      <SectionLabel label="DICTAMEN FORMAL" />
-      <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-6 mb-8">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-black text-slate-900">Empresa emisora</p>
-          <p className="text-xs font-light text-slate-400">
-            Nombre que aparece en el dictamen imprimible. Si lo dejás vacío, se usa
-            <span className="font-black text-slate-600"> ΛPPTO</span>.
-          </p>
-        </div>
-        <form action={saveDictamenIssuer} className="flex flex-col gap-4">
-          <Field
-            id="dictamen_issuer"
-            name="dictamen_issuer"
-            label="Nombre de la empresa emisora"
-            defaultValue={company.dictamen_issuer ?? ""}
-            placeholder="Ej: Concesionaria López"
-          />
-          <div className="flex justify-end pt-2">
-            <SubmitButton label="GUARDAR" />
-          </div>
-        </form>
-      </div>
-
-      {/* ── PLAN Y FACTURACIÓN ── */}
-      <SectionLabel label="PLAN Y FACTURACIÓN" />
-      <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-4 mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-black text-slate-900">Plan actual</p>
-            <p
-              className="text-xs font-light text-slate-400 tracking-widest"
-              style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-            >
-              {company.plan_tier} · {company.monthly_quota} auditorías / mes
+          <SectionLabel label="PLAN Y FACTURACIÓN" />
+          <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-black text-slate-900">Plan actual</p>
+                <p
+                  className="text-xs font-light text-slate-400 tracking-widest"
+                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                >
+                  {company.plan_tier} · {company.monthly_quota} auditorías / mes
+                </p>
+              </div>
+              <a
+                href="mailto:hola@appto.ar?subject=Solicitud%20de%20actualización%20de%20plan"
+                className="
+                  shrink-0 px-6 py-3
+                  text-[10px] font-black tracking-[0.25em] text-slate-500 uppercase
+                  border border-slate-200
+                  hover:border-slate-400 hover:text-slate-900
+                  transition-colors
+                "
+              >
+                [ ACTUALIZAR PLAN ]
+              </a>
+            </div>
+            <p className="text-[10px] font-light text-slate-400 leading-relaxed">
+              Para cambiar de plan o agregar créditos adicionales, contactá a ΛPPTO.
+              Un representante te responde dentro de las 24 hs hábiles.
             </p>
           </div>
-          <a
-            href="mailto:hola@appto.ar?subject=Solicitud%20de%20actualización%20de%20plan"
-            className="
-              shrink-0 px-6 py-3
-              text-[10px] font-black tracking-[0.25em] text-slate-500 uppercase
-              border border-slate-200
-              hover:border-slate-400 hover:text-slate-900
-              transition-colors
-            "
-          >
-            [ ACTUALIZAR PLAN ]
-          </a>
-        </div>
-        <p className="text-[10px] font-light text-slate-400 leading-relaxed">
-          Para cambiar de plan o agregar créditos adicionales, contactá a ΛPPTO.
-          Un representante te responde dentro de las 24 hs hábiles.
-        </p>
-      </div>
 
+        </div>
+
+        {/* ── COLUMNA DERECHA: configuración editable ── */}
+        <div className="flex flex-col">
+
+          <SectionLabel label="SEGURIDAD" />
+          <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-6 mb-8">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-black text-slate-900">Cambiar contraseña</p>
+              <p className="text-xs font-light text-slate-400">Mínimo 8 caracteres.</p>
+            </div>
+            <form action={changePassword} className="flex flex-col gap-4">
+              <Field id="password" name="password" label="Nueva contraseña"    type="password" />
+              <Field id="confirm"  name="confirm"  label="Confirmar contraseña" type="password" />
+              <div className="flex justify-end pt-2">
+                <SubmitButton label="ACTUALIZAR CONTRASEÑA" />
+              </div>
+            </form>
+          </div>
+
+          <SectionLabel label="DICTAMEN FORMAL" />
+          <div className="border border-slate-200 bg-white px-8 py-7 flex flex-col gap-6">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-black text-slate-900">Empresa emisora</p>
+              <p className="text-xs font-light text-slate-400">
+                Nombre que aparece en el dictamen imprimible. Si lo dejás vacío, se usa
+                <span className="font-black text-slate-600"> ΛPPTO</span>.
+              </p>
+            </div>
+            <form action={saveDictamenIssuer} className="flex flex-col gap-4">
+              <Field
+                id="dictamen_issuer"
+                name="dictamen_issuer"
+                label="Nombre de la empresa emisora"
+                defaultValue={company.dictamen_issuer ?? ""}
+                placeholder="Ej: Concesionaria López"
+              />
+              <div className="flex justify-end pt-2">
+                <SubmitButton label="GUARDAR" />
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
     </div>
   );
 }
