@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { saveNote } from "@/app/actions/business";
+import { saveReview } from "@/app/actions/reviews";
 import { generateAnalystVerdict } from "@/lib/utils/scoring";
 import type { TrendDirection } from "@/lib/utils/scoring";
 import type {
@@ -609,10 +610,10 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
     profile.bcra_score === 1
       ? "Situación 1 (Normal)"
       : `Situación ${profile.bcra_score} (Riesgo)`
-  const socialScore =
+  const avgRating =
     reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-      : 10.0
+      : null
 
   return (
     <>
@@ -716,10 +717,12 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
               SCORE SOCIAL
             </span>
             <span className="text-2xl font-extrabold text-slate-900 leading-tight">
-              {socialScore.toFixed(1)} / 10
+              {avgRating !== null ? `${avgRating.toFixed(1)} / 5` : "—"}
             </span>
             <span className="text-sm font-light text-slate-500">
-              Promedio de reseñas
+              {reviews.length > 0
+                ? `${reviews.length} evaluación${reviews.length !== 1 ? "es" : ""} de empresas`
+                : "Sin evaluaciones aún"}
             </span>
           </div>
 
@@ -767,6 +770,13 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
           </div>
         )}
       </div>
+
+      {/* ── RED COLABORATIVA ── */}
+      <ReviewsSection
+        reviews={reviews}
+        profileId={profile.id}
+        companyId={companyId}
+      />
 
       {/* ── DICTAMEN DEL ANALISTA IA ── */}
       <AnalystVerdict
@@ -865,47 +875,6 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
               <button className="self-start md:self-center text-[10px] font-black tracking-[0.15em] text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-4 py-2.5 transition-colors whitespace-nowrap cursor-pointer">
                 [ EVALUAR GARANTE ]
               </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── HISTORIAL DE REPUTACIÓN ── */}
-      {reviews.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="px-10 py-7 border-b border-slate-100">
-            <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
-              REGISTRO COLABORATIVO DE EMPRESAS
-            </h2>
-            <p className="text-xs font-light text-slate-400 mt-1">
-              Reseñas verificadas de empresas participantes de la red ΛPPTO
-            </p>
-          </div>
-
-          {reviews.map((review) => (
-            <div
-              key={review.id}
-              className="px-10 py-8 border-b border-slate-100 last:border-0 flex flex-col gap-4"
-            >
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-black text-slate-900">
-                    {review.company.company_name}
-                  </span>
-                  <span
-                    className="text-xs tracking-widest text-slate-400"
-                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                  >
-                    CUIT: {review.company.cuit} · {formatDate(review.created_at)}
-                  </span>
-                </div>
-                <span className="self-start md:self-center text-[10px] font-black tracking-[0.2em] text-slate-500 border border-slate-200 rounded-md px-3 py-1.5 whitespace-nowrap">
-                  {review.rating} / 5
-                </span>
-              </div>
-              <p className="text-sm font-light text-slate-600 leading-relaxed max-w-2xl">
-                {review.comment}
-              </p>
             </div>
           ))}
         </div>
@@ -1143,5 +1112,196 @@ function SituacionSparkline({ history, trend }: { history: SituacionPoint[]; tre
       <circle cx={toX(0)}     cy={toY(history[0].situacion)}     r="3" fill={trendColor} fillOpacity="0.5" />
       <circle cx={toX(n - 1)} cy={toY(history[n - 1].situacion)} r="3" fill={trendColor} />
     </svg>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Rating stars — visual display only
+// ─────────────────────────────────────────────
+
+function RatingStars({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} className={s <= rating ? "text-amber-400" : "text-slate-200"}>
+          ★
+        </span>
+      ))}
+      <span className="text-[10px] font-black text-slate-400 ml-2 tabular-nums">
+        {rating} / 5
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Reviews section — red colaborativa ΛPPTO
+// ─────────────────────────────────────────────
+
+function ReviewsSection({
+  reviews,
+  profileId,
+  companyId,
+}: {
+  reviews: ReviewWithCompany[];
+  profileId: string;
+  companyId: string;
+}) {
+  const hasAlreadyReviewed = reviews.some((r) => r.company_id === companyId);
+  const avgRating =
+    reviews.length > 0
+      ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
+      : null;
+
+  const dist = [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: reviews.filter((r) => r.rating === star).length,
+  }));
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+
+      {/* Header */}
+      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            Red Colaborativa ΛPPTO
+          </h2>
+          <p className="text-xs font-light text-slate-400 mt-1 max-w-md leading-relaxed">
+            Evaluaciones de empresas de la red — datos exclusivos que no existen en el BCRA ni en ninguna otra fuente.
+          </p>
+        </div>
+        {avgRating !== null && (
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-4xl font-black text-slate-900 tabular-nums leading-none">
+              {avgRating.toFixed(1)}
+              <span className="text-xl font-light text-slate-300"> / 5</span>
+            </span>
+            <span className="text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase mt-1">
+              {reviews.length} EVALUACIÓN{reviews.length !== 1 ? "ES" : ""}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Rating breakdown */}
+      {reviews.length > 0 && (
+        <div className="px-10 py-6 border-b border-slate-100">
+          <div className="flex flex-col gap-2.5 max-w-xs">
+            {dist.map(({ star, count }) => {
+              const pct = (count / reviews.length) * 100;
+              return (
+                <div key={star} className="flex items-center gap-3">
+                  <span className="text-[10px] font-black text-slate-500 w-3 text-right tabular-nums">
+                    {star}
+                  </span>
+                  <span className="text-amber-400 text-xs leading-none">★</span>
+                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-slate-400 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-light text-slate-400 w-4 tabular-nums">
+                    {count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Reviews list */}
+      {reviews.map((review) => (
+        <div
+          key={review.id}
+          className="px-10 py-8 border-b border-slate-100 flex flex-col gap-4"
+        >
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-black text-slate-900">
+                {review.company.company_name}
+              </span>
+              <span
+                className="text-xs tracking-widest text-slate-400"
+                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              >
+                CUIT: {review.company.cuit} · {formatDate(review.created_at)}
+              </span>
+            </div>
+            <RatingStars rating={review.rating} />
+          </div>
+          {review.comment && (
+            <p className="text-sm font-light text-slate-600 leading-relaxed max-w-2xl">
+              {review.comment}
+            </p>
+          )}
+        </div>
+      ))}
+
+      {/* Empty state */}
+      {reviews.length === 0 && (
+        <div className="px-10 py-8 border-b border-slate-100">
+          <p className="text-sm font-light text-slate-400 leading-relaxed">
+            Este perfil aún no tiene evaluaciones en la red. Tu empresa puede ser la primera en aportar datos — esa información no existe en ninguna otra fuente.
+          </p>
+        </div>
+      )}
+
+      {/* Add review form */}
+      {!hasAlreadyReviewed ? (
+        <div className="px-10 py-7">
+          <p className="text-[10px] font-black tracking-[0.3em] text-slate-400 uppercase mb-5">
+            DEJAR EVALUACIÓN
+          </p>
+          <form action={saveReview} className="flex flex-col gap-5">
+            <input type="hidden" name="profile_id" value={profileId} />
+            <input type="hidden" name="company_id" value={companyId} />
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
+                Calificación
+              </label>
+              <select
+                name="rating"
+                required
+                className="w-48 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-light text-slate-700 bg-white focus:outline-none focus:border-slate-500 transition-colors cursor-pointer"
+              >
+                <option value="">Seleccioná...</option>
+                <option value="5">5 ★ — Excelente</option>
+                <option value="4">4 ★ — Bueno</option>
+                <option value="3">3 ★ — Regular</option>
+                <option value="2">2 ★ — Malo</option>
+                <option value="1">1 ★ — Muy malo</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
+                Comentario <span className="font-light normal-case tracking-normal">(opcional)</span>
+              </label>
+              <textarea
+                name="comment"
+                rows={3}
+                placeholder="Describí tu experiencia con este perfil..."
+                className="w-full bg-transparent border border-slate-200 px-4 py-3 text-sm font-light text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-slate-500 resize-none transition-colors"
+              />
+            </div>
+            <button
+              type="submit"
+              className="self-start px-8 py-3 text-[11px] font-black tracking-[0.2em] text-white hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer"
+              style={{ backgroundColor: "var(--color-secondary)" }}
+            >
+              PUBLICAR EVALUACIÓN
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="px-10 py-6">
+          <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
+            Tu empresa ya evaluó este perfil — tu aporte está en la red.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
