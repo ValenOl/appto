@@ -27,6 +27,7 @@ export type Database = {
           queries_used:        number
           cycle_reset_date:    string
           created_at:          string
+          dictamen_issuer:     string | null
         }
         Insert: {
           id?:                  string
@@ -39,6 +40,7 @@ export type Database = {
           queries_used?:        number
           cycle_reset_date:     string
           created_at?:          string
+          dictamen_issuer?:     string | null
         }
         Update: {
           id?:                  string
@@ -51,6 +53,7 @@ export type Database = {
           queries_used?:        number
           cycle_reset_date?:    string
           created_at?:          string
+          dictamen_issuer?:     string | null
         }
       }
 

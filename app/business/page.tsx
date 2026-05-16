@@ -96,6 +96,7 @@ interface ProfileData {
 
 interface ResultsProps extends ProfileData {
   companyId:      string;
+  company:        Company;
   priorNote:      Note | null;
   internalNotes:  Note[];
   declaredIncome: number;
@@ -477,6 +478,7 @@ export default async function BusinessDashboard(props: {
           <Results
             {...result}
             companyId={company.id}
+            company={company}
             priorNote={priorNote}
             internalNotes={internalNotes}
             declaredIncome={declaredIncome}
@@ -857,7 +859,7 @@ const DICTAMEN_CONFIG: Record<DictamenVerdict, { label: string; color: string }>
   no_aprobado:      { label: 'NO APROBADO',      color: '#dc2626' },
 };
 
-function DictamenSello({ profile }: { profile: Profile }) {
+function DictamenSello({ profile, issuerName }: { profile: Profile; issuerName?: string | null }) {
   const apptoScore = profile.appto_score ?? 0;
   const verdict    = getDictamenVerdict(profile.bcra_score, apptoScore);
   const cfg        = DICTAMEN_CONFIG[verdict];
@@ -925,6 +927,7 @@ function DictamenSello({ profile }: { profile: Profile }) {
             { label: 'DENOMINACIÓN',   value: profile.full_name },
             { label: 'SCORE ΛPPTO',    value: `${apptoScore} / 1000` },
             { label: 'SITUACIÓN BCRA', value: bcraLabel },
+            ...(issuerName ? [{ label: 'EMITIDO POR', value: issuerName }] : []),
           ].map(({ label, value }) => (
             <div key={label} className="flex items-center px-6 py-3 gap-4">
               <span className="text-[9px] font-black tracking-[0.3em] text-slate-400 uppercase w-40 shrink-0">
@@ -952,7 +955,7 @@ function DictamenSello({ profile }: { profile: Profile }) {
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
-function Results({ profile, reviews, links, companyId, priorNote, internalNotes, declaredIncome, afipData }: ResultsProps) {
+function Results({ profile, reviews, links, companyId, company, priorNote, internalNotes, declaredIncome, afipData }: ResultsProps) {
   const isApto = profile.bcra_score === 1
   const bcraLabel =
     profile.bcra_score === 1
@@ -1120,7 +1123,7 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes,
       </div>
 
       {/* ── DICTAMEN FORMAL ── */}
-      <DictamenSello profile={profile} />
+      <DictamenSello profile={profile} issuerName={company.dictamen_issuer ?? null} />
 
       {/* ── ESTADO FISCAL AFIP ── */}
       {afipData && <AfipSection afipData={afipData} />}
