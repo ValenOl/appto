@@ -23,7 +23,8 @@ export async function signUpCompany(formData: FormData) {
     redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent(error?.message ?? 'Error al crear el usuario')}`)
   }
 
-  const monthly_quota    = plan_tier === 'PRO' ? 50 : 10
+  const QUOTA: Record<string, number> = { BASICO: 30, PRO: 150, ENTERPRISE: 500 }
+  const monthly_quota    = QUOTA[plan_tier] ?? 30
   const cycle_reset_date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .split('T')[0]

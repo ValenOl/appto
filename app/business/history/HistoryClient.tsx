@@ -165,9 +165,10 @@ export function HistoryClient({ rows }: { rows: SearchHistory[] }) {
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors cursor-pointer group"
+                    onClick={() => window.location.href = `/business?cuit=${row.query_target}`}
                   >
-                    <td className="px-8 py-5 text-sm font-black text-slate-900 truncate max-w-0">
+                    <td className="px-8 py-5 text-sm font-black text-slate-900 truncate max-w-0 group-hover:text-slate-600 transition-colors">
                       {row.full_name || <span className="font-light text-slate-300">—</span>}
                     </td>
                     <td

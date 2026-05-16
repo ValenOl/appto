@@ -101,6 +101,7 @@ interface ResultsProps extends ProfileData {
   internalNotes:  Note[];
   declaredIncome: number;
   afipData:       AfipResult | null;
+  isNew:          boolean;
 }
 
 async function getProfileContext(
@@ -180,6 +181,7 @@ export default async function BusinessDashboard(props: {
   let noRecords = false;   // Estado A: CUIT/CUIL truly absent from all BCRA endpoints
   let zeroDebt  = false;   // Estado B: found in BCRA but zero active debt (has historical activity)
   let apiError  = false;   // BCRA API down / network failure — do not treat as Estado A
+  let isNew     = false;   // true = fresh BCRA fetch (billable), false = cache hit (free)
   let priorNote: Note | null = null;
   let internalNotes: Note[] = [];
   let garanteProfile: Profile | null = null;
@@ -202,6 +204,7 @@ export default async function BusinessDashboard(props: {
       // Estado A — all BCRA endpoints returned nothing, no credit consumed
       noRecords = true;
     } else {
+      isNew = fetchOutcome.isNew;
       if (fetchOutcome.isNew) {
         // Rule C — first successful BCRA fetch, consume credit
         const consumed = await consumeCredit(company.id);
@@ -499,6 +502,7 @@ export default async function BusinessDashboard(props: {
             internalNotes={internalNotes}
             declaredIncome={declaredIncome}
             afipData={afipData}
+            isNew={isNew}
           />
         )}
 
@@ -971,7 +975,7 @@ function DictamenSello({ profile, issuerName }: { profile: Profile; issuerName?:
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
-function Results({ profile, reviews, links, companyId, company, priorNote, internalNotes, declaredIncome, afipData }: ResultsProps) {
+function Results({ profile, reviews, links, companyId, company, priorNote, internalNotes, declaredIncome, afipData, isNew }: ResultsProps) {
   const isApto = profile.bcra_score === 1
   const bcraLabel =
     profile.bcra_score === 1
@@ -1011,6 +1015,22 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
           >
             CUIT: {profile.cuit}
           </span>
+          <div className="mt-4">
+            {isNew ? (
+              <span
+                className="inline-flex items-center gap-2 text-[9px] font-black tracking-[0.3em] uppercase px-3 py-1.5"
+                style={{ color: 'var(--color-secondary)', backgroundColor: 'rgba(0,108,73,0.06)', border: '1px solid rgba(0,108,73,0.2)' }}
+              >
+                DATOS EN TIEMPO REAL · AUDITORÍA CONSUMIDA
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-2 text-[9px] font-black tracking-[0.3em] uppercase px-3 py-1.5 text-slate-400 bg-slate-50 border border-slate-200"
+              >
+                DATOS DEL {new Date(profile.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()} · CACHÉ BCRA · SIN COSTO
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Veredicto */}

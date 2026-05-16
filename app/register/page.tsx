@@ -1,8 +1,9 @@
 import { signUpCompany } from '@/app/actions/auth'
 
 const PLAN_DISPLAY: Record<string, string> = {
-  BASICO: 'BÁSICO',
-  PRO: 'PRO',
+  BASICO:     'BÁSICO',
+  PRO:        'PRO',
+  ENTERPRISE: 'ENTERPRISE',
 }
 
 export default async function RegisterPage(props: {

@@ -1,4 +1,5 @@
 import { saveLead } from '@/app/actions/leads'
+import { PricingModal } from '@/app/PricingModal'
 
 export default async function Home(props: {
   searchParams: Promise<{ s?: string }>
@@ -18,12 +19,15 @@ export default async function Home(props: {
           <span className="text-sm font-black tracking-tight text-slate-900">
             ΛPPTO
           </span>
-          <a
-            href="/login"
-            className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors"
-          >
-            ACCESO CORPORATIVO
-          </a>
+          <div className="flex items-center gap-6 md:gap-8">
+            <PricingModal />
+            <a
+              href="/login"
+              className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors"
+            >
+              ACCESO CORPORATIVO
+            </a>
+          </div>
         </div>
       </header>
 
