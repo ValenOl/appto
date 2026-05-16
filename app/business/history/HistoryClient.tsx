@@ -147,8 +147,8 @@ export function HistoryClient({ rows }: { rows: SearchHistory[] }) {
           </p>
         </div>
       ) : (
-        <div className="border border-slate-200 bg-white overflow-hidden">
-          <table className="w-full">
+        <div className="border border-slate-200 bg-white overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="px-8 py-4 text-left   text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">Denominación</th>

@@ -275,7 +275,7 @@ export default async function BusinessDashboard(props: {
         }
       `}</style>
 
-      <main className="max-w-5xl mx-auto px-8 py-10 flex flex-col gap-8">
+      <main className="max-w-5xl mx-auto px-4 py-6 md:px-8 md:py-10 flex flex-col gap-8">
 
         {/* ── PRINT HEADER (hidden on screen) ── */}
         <div
@@ -781,7 +781,7 @@ function OperacionVeredicto({ titular, garante }: { titular: Profile; garante: P
       style={{ borderColor: cfg.border, borderLeft: `4px solid ${cfg.border}` }}
     >
       {/* Header */}
-      <div className="px-10 py-6 border-b border-slate-100">
+      <div className="px-5 py-5 md:px-10 md:py-6 border-b border-slate-100">
         <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase">
           EVALUACIÓN DE OPERACIÓN
         </span>
@@ -793,7 +793,7 @@ function OperacionVeredicto({ titular, garante }: { titular: Profile; garante: P
           { label: 'TITULAR',  p: titular },
           { label: 'GARANTE',  p: garante },
         ].map(({ label, p }) => (
-          <div key={label} className="px-10 py-7 flex flex-col gap-2">
+          <div key={label} className="px-5 py-5 md:px-10 md:py-7 flex flex-col gap-2">
             <span className="text-[9px] font-black tracking-[0.4em] text-slate-400 uppercase">
               {label}
             </span>
@@ -826,7 +826,7 @@ function OperacionVeredicto({ titular, garante }: { titular: Profile; garante: P
       </div>
 
       {/* Veredicto */}
-      <div className="px-10 py-8 border-t border-slate-100" style={{ backgroundColor: cfg.bg }}>
+      <div className="px-5 py-6 md:px-10 md:py-8 border-t border-slate-100" style={{ backgroundColor: cfg.bg }}>
         <span
           className="text-2xl md:text-3xl font-black tracking-tight"
           style={{ color: cfg.color }}
@@ -877,7 +877,7 @@ function DictamenSello({ profile, issuerName }: { profile: Profile; issuerName?:
       className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
     >
       {/* Header */}
-      <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between gap-4">
+      <div className="px-5 py-5 md:px-10 md:py-6 border-b border-slate-100 flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             Dictamen Formal
@@ -890,7 +890,7 @@ function DictamenSello({ profile, issuerName }: { profile: Profile; issuerName?:
       </div>
 
       {/* Body */}
-      <div className="px-10 py-10 flex flex-col items-center gap-8">
+      <div className="px-5 py-6 md:px-10 md:py-10 flex flex-col items-center gap-8">
 
         {/* Sello */}
         <div
@@ -985,7 +985,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
 
         {/* Cabecera */}
-        <div className="px-10 pt-10 pb-8 border-b border-slate-100">
+        <div className="px-5 pt-6 pb-5 md:px-10 md:pt-10 md:pb-8 border-b border-slate-100">
           <h1 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-none">
             {profile.full_name}
           </h1>
@@ -1041,7 +1041,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
         </div>
 
         {/* Cuatro columnas de datos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-10 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-5 py-6 md:px-10 md:py-8">
           <div className="flex flex-col gap-2 pb-6 md:pb-0 md:pr-10">
             <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
               SCORE ΛPPTO
@@ -1090,7 +1090,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
 
         {/* ── SPARKLINE ── */}
         {profile.situacion_history && (profile.situacion_history as SituacionPoint[]).length > 1 && (
-          <div className="px-10 py-7 border-t border-slate-100">
+          <div className="px-5 py-5 md:px-10 md:py-7 border-t border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <span className="text-[9px] font-black tracking-[0.4em] text-slate-400 uppercase">
                 Evolución situación BCRA — últimos 24 meses
@@ -1153,7 +1153,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
       {/* ── COMPOSICIÓN DE DEUDA ── */}
       {profile.debt_detail && (profile.debt_detail as DebtEntry[]).length > 0 && (
         <div id="debt-table" className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="px-10 py-6 border-b border-slate-100">
+          <div className="px-5 py-5 md:px-10 md:py-6 border-b border-slate-100">
             <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
               COMPOSICIÓN DE DEUDA
             </h2>
@@ -1161,16 +1161,17 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
               Entidades informantes en el último período disponible del BCRA.
             </p>
           </div>
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-10 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                <th className="px-5 md:px-10 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
                   Entidad
                 </th>
-                <th className="px-6 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                <th className="px-4 md:px-6 py-4 text-left text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
                   Situación
                 </th>
-                <th className="px-10 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                <th className="px-5 md:px-10 py-4 text-right text-[9px] font-black tracking-[0.35em] text-slate-400 uppercase">
                   Monto Estimado
                 </th>
               </tr>
@@ -1178,13 +1179,13 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
             <tbody>
               {(profile.debt_detail as DebtEntry[]).map((entry, i) => (
                 <tr key={i} className="border-b border-slate-100 last:border-0">
-                  <td className="px-10 py-4 text-sm font-light text-slate-700">
+                  <td className="px-5 md:px-10 py-4 text-sm font-light text-slate-700">
                     {entry.descripcion || entry.entidad
                       ? <>{entry.descripcion || String(entry.entidad)}</>
                       : <span className="text-slate-300">—</span>
                     }
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 md:px-6 py-4">
                     <span
                       className={`text-[10px] font-black tracking-[0.15em] px-3 py-1 ${
                         entry.situacion === 1
@@ -1196,7 +1197,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
                     </span>
                   </td>
                   <td
-                    className="px-10 py-4 text-sm font-light text-slate-700 text-right tabular-nums"
+                    className="px-5 md:px-10 py-4 text-sm font-light text-slate-700 text-right tabular-nums"
                     style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                   >
                     $ {formatIncome(entry.monto * 1000)}
@@ -1205,6 +1206,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -1214,7 +1216,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
       {/* ── NOTAS INTERNAS ── */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
 
-        <div className="px-10 py-7 border-b border-slate-100">
+        <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             NOTAS INTERNAS
           </h2>
@@ -1224,7 +1226,7 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
         </div>
 
         {/* Formulario */}
-        <div className="px-10 py-7 border-b border-slate-100">
+        <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100">
           <form action={saveNote} className="flex flex-col gap-4">
             <input type="hidden" name="profile_id" value={profile.id} />
             <input type="hidden" name="company_id" value={companyId} />
@@ -1257,14 +1259,14 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
 
         {/* Listado de notas */}
         {internalNotes.length === 0 ? (
-          <div className="px-10 py-8">
+          <div className="px-5 py-6 md:px-10 md:py-8">
             <p className="text-sm font-light text-slate-400">Sin notas previas para este perfil.</p>
           </div>
         ) : (
           internalNotes.map((note) => (
             <div
               key={note.id}
-              className="px-10 py-6 border-b border-slate-100 last:border-0 flex flex-col gap-2"
+              className="px-5 py-5 md:px-10 md:py-6 border-b border-slate-100 last:border-0 flex flex-col gap-2"
             >
               <span
                 className="text-[9px] font-black tracking-[0.35em] text-slate-300 uppercase"
@@ -1498,7 +1500,7 @@ function CapacityAnalysis({
       className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
       style={{ borderLeft: `4px solid ${color}` }}
     >
-      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+      <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             Análisis de Capacidad
@@ -1515,7 +1517,7 @@ function CapacityAnalysis({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-10 py-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-5 py-6 md:px-10 md:py-8">
         <div className="flex flex-col gap-2 pb-6 md:pb-0 md:pr-10">
           <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
             Ingreso Mensual
@@ -1614,7 +1616,7 @@ function ReviewsSection({
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
 
       {/* Header */}
-      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+      <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
         <div className="flex flex-col gap-1">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             Red Colaborativa ΛPPTO
@@ -1638,7 +1640,7 @@ function ReviewsSection({
 
       {/* Rating breakdown */}
       {reviews.length > 0 && (
-        <div className="px-10 py-6 border-b border-slate-100">
+        <div className="px-5 py-5 md:px-10 md:py-6 border-b border-slate-100">
           <div className="flex flex-col gap-2.5 max-w-xs">
             {dist.map(({ star, count }) => {
               const pct = (count / reviews.length) * 100;
@@ -1668,7 +1670,7 @@ function ReviewsSection({
       {reviews.map((review) => (
         <div
           key={review.id}
-          className="px-10 py-8 border-b border-slate-100 flex flex-col gap-4"
+          className="px-5 py-6 md:px-10 md:py-8 border-b border-slate-100 flex flex-col gap-4"
         >
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             <div className="flex flex-col gap-0.5">
@@ -1694,7 +1696,7 @@ function ReviewsSection({
 
       {/* Empty state */}
       {reviews.length === 0 && (
-        <div className="px-10 py-8 border-b border-slate-100">
+        <div className="px-5 py-6 md:px-10 md:py-8 border-b border-slate-100">
           <p className="text-sm font-light text-slate-400 leading-relaxed">
             Este perfil aún no tiene evaluaciones en la red. Tu empresa puede ser la primera en aportar datos — esa información no existe en ninguna otra fuente.
           </p>
@@ -1705,7 +1707,7 @@ function ReviewsSection({
       {!hasAlreadyReviewed ? (
         <ReviewForm profileId={profileId} companyId={companyId} />
       ) : (
-        <div className="px-10 py-6 border-t border-slate-100">
+        <div className="px-5 py-5 md:px-10 md:py-6 border-t border-slate-100">
           <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
             Tu empresa ya evaluó este perfil — tu aporte está en la red.
           </p>
@@ -1751,7 +1753,7 @@ function GroupEvaluationSection({
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
 
       {/* Header + group verdict */}
-      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+      <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             Red de Vínculos — Evaluación Grupal
@@ -1785,7 +1787,7 @@ function GroupEvaluationSection({
         return (
           <div
             key={link.id}
-            className="px-10 py-7 border-b border-slate-100 last:border-0 flex flex-col gap-4"
+            className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100 last:border-0 flex flex-col gap-4"
           >
             {/* Identity row */}
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
@@ -1907,7 +1909,7 @@ function AfipSection({ afipData }: { afipData: AfipResult }) {
       className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
       style={{ borderLeft: `4px solid ${activeColor}` }}
     >
-      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+      <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
             Estado Fiscal · AFIP
@@ -1924,7 +1926,7 @@ function AfipSection({ afipData }: { afipData: AfipResult }) {
         </span>
       </div>
 
-      <div className="px-10 py-8 flex flex-col gap-6">
+      <div className="px-5 py-6 md:px-10 md:py-8 flex flex-col gap-6">
 
         {/* Registrations */}
         {chips.length > 0 && (

@@ -22,9 +22,9 @@ export default async function BusinessLayout({
   if (!company) redirect("/login");
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <Sidebar companyName={company.company_name} />
-      <main className="flex-1 min-w-0">
+      <main className="md:ml-60 pt-14 md:pt-0 min-h-screen">
         {children}
       </main>
     </div>

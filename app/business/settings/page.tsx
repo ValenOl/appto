@@ -46,7 +46,7 @@ export default async function SettingsPage(props: {
 
   return (
     <div
-      className="px-10 py-10"
+      className="px-4 py-6 md:px-10 md:py-10"
       style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
     >
       {/* Header */}

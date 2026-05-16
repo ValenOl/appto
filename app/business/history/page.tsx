@@ -34,7 +34,7 @@ export default async function HistoryPage() {
 
   return (
     <div
-      className="px-10 py-10"
+      className="px-4 py-6 md:px-10 md:py-10"
       style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}
     >
       <div className="mb-10 flex flex-col gap-2">
@@ -50,7 +50,7 @@ export default async function HistoryPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="border border-slate-200 bg-white px-10 py-16 flex flex-col gap-3">
+        <div className="border border-slate-200 bg-white px-6 py-10 md:px-10 md:py-16 flex flex-col gap-3">
           <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
             SIN REGISTROS
           </span>
