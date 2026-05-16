@@ -9,6 +9,8 @@ import { saveNote } from "@/app/actions/business";
 import { saveReview } from "@/app/actions/reviews";
 import { generateAnalystVerdict } from "@/lib/utils/scoring";
 import type { TrendDirection } from "@/lib/utils/scoring";
+import { fetchAfipData, afipIngresoMensualMax } from "@/lib/services/afipService";
+import type { AfipResult } from "@/lib/services/afipService";
 import type {
   Company,
   Profile,
@@ -80,6 +82,7 @@ interface ResultsProps extends ProfileData {
   priorNote:      Note | null;
   internalNotes:  Note[];
   declaredIncome: number;
+  afipData:       AfipResult | null;
 }
 
 async function getProfileContext(
@@ -138,6 +141,7 @@ export default async function BusinessDashboard(props: {
   let quotaExhausted = false;
   let exhaustedPlanTier = "";
   let result: ProfileData | null = null;
+  let afipData: AfipResult | null = null;
   let noRecords = false;   // Estado A: CUIT/CUIL truly absent from all BCRA endpoints
   let zeroDebt  = false;   // Estado B: found in BCRA but zero active debt (has historical activity)
   let apiError  = false;   // BCRA API down / network failure — do not treat as Estado A
@@ -172,8 +176,6 @@ export default async function BusinessDashboard(props: {
       // Rule A — isNew === false means cache hit, credit is NOT consumed (falls through)
 
       if (!quotaExhausted) {
-        result = await getProfileContext(fetchOutcome.profile, authClient);
-
         // Estado B: person was found in BCRA but currently carries no active debt.
         // Only flag this when hasHistoricalActivity is true; if it's false the
         // API responded but with fully empty arrays (treat as Estado A).
@@ -184,13 +186,20 @@ export default async function BusinessDashboard(props: {
           zeroDebt = true;
         }
 
-        const { data } = await authClient
-          .from("notes")
-          .select("*")
-          .eq("company_id", company.id)
-          .eq("profile_id", fetchOutcome.profile.id)
-          .order("created_at", { ascending: false });
-        internalNotes = (data ?? []) as Note[];
+        const [profileCtx, afipFetch, { data: notesData }] = await Promise.all([
+          getProfileContext(fetchOutcome.profile, authClient),
+          fetchAfipData(fetchOutcome.profile.cuit),
+          authClient
+            .from("notes")
+            .select("*")
+            .eq("company_id", company.id)
+            .eq("profile_id", fetchOutcome.profile.id)
+            .order("created_at", { ascending: false }),
+        ]);
+
+        result    = profileCtx;
+        afipData  = afipFetch;
+        internalNotes = (notesData ?? []) as Note[];
         priorNote = internalNotes.length > 0 ? internalNotes[0] : null;
       }
     }
@@ -396,6 +405,7 @@ export default async function BusinessDashboard(props: {
             priorNote={priorNote}
             internalNotes={internalNotes}
             declaredIncome={declaredIncome}
+            afipData={afipData}
           />
         )}
 
@@ -644,7 +654,7 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
-function Results({ profile, reviews, links, companyId, priorNote, internalNotes, declaredIncome }: ResultsProps) {
+function Results({ profile, reviews, links, companyId, priorNote, internalNotes, declaredIncome, afipData }: ResultsProps) {
   const isApto = profile.bcra_score === 1
   const bcraLabel =
     profile.bcra_score === 1
@@ -810,6 +820,9 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes,
           </div>
         )}
       </div>
+
+      {/* ── ESTADO FISCAL AFIP ── */}
+      {afipData && <AfipSection afipData={afipData} />}
 
       {/* ── RED COLABORATIVA ── */}
       <ReviewsSection
@@ -1562,6 +1575,165 @@ function GroupEvaluationSection({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// AFIP section — fiscal identity verification
+// ─────────────────────────────────────────────
+//
+// Calls the public AFIP Padrón API using the resolved CUIT (works whether
+// the user searched by CUIT or DNI — the DNI→CUIT resolution already happened
+// in bcraService before we reach this component).
+
+function AfipSection({ afipData }: { afipData: AfipResult }) {
+  const mensualMax = afipIngresoMensualMax(afipData);
+
+  // Build registration chips
+  const chips: { label: string; color: string; bg: string; border: string }[] = [];
+
+  if (afipData.esMonotributista && afipData.categoria) {
+    chips.push({
+      label:  `Monotributo Cat. ${afipData.categoria}`,
+      color:  "#1d4ed8",
+      bg:     "rgba(29,78,216,0.06)",
+      border: "rgba(29,78,216,0.2)",
+    });
+  } else if (afipData.esMonotributista) {
+    chips.push({
+      label:  "Monotributo",
+      color:  "#1d4ed8",
+      bg:     "rgba(29,78,216,0.06)",
+      border: "rgba(29,78,216,0.2)",
+    });
+  }
+
+  if (afipData.esAutonomo) {
+    chips.push({
+      label:  "Autónomo",
+      color:  "#7c3aed",
+      bg:     "rgba(124,58,237,0.06)",
+      border: "rgba(124,58,237,0.2)",
+    });
+  }
+
+  if (afipData.esRespInscripto) {
+    chips.push({
+      label:  "IVA Resp. Inscripto",
+      color:  "#0369a1",
+      bg:     "rgba(3,105,161,0.06)",
+      border: "rgba(3,105,161,0.2)",
+    });
+  }
+
+  if (chips.length === 0 && afipData.estadoActivo) {
+    chips.push({
+      label:  "Registrado en AFIP",
+      color:  "#64748b",
+      bg:     "rgba(100,116,139,0.06)",
+      border: "rgba(100,116,139,0.2)",
+    });
+  }
+
+  const activeColor  = afipData.estadoActivo ? "#16a34a" : "#dc2626";
+  const activeBg     = afipData.estadoActivo ? "rgba(22,163,74,0.06)"  : "rgba(220,38,38,0.06)";
+  const activeBorder = afipData.estadoActivo ? "rgba(22,163,74,0.25)"  : "rgba(220,38,38,0.25)";
+  const activeLabel  = afipData.estadoActivo ? "ACTIVO" : "INACTIVO";
+
+  return (
+    <div
+      className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
+      style={{ borderLeft: `4px solid ${activeColor}` }}
+    >
+      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            Estado Fiscal · AFIP
+          </h2>
+          <p className="text-xs font-light text-slate-400 mt-1">
+            Fuente: Padrón Único de Contribuyentes AFIP (dato público).
+          </p>
+        </div>
+        <span
+          className="self-start text-[10px] font-black tracking-[0.25em] px-4 py-2 rounded-lg"
+          style={{ color: activeColor, backgroundColor: activeBg, border: `1px solid ${activeBorder}` }}
+        >
+          {activeLabel}
+        </span>
+      </div>
+
+      <div className="px-10 py-8 flex flex-col gap-6">
+
+        {/* Registrations */}
+        {chips.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+              Inscripciones activas
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {chips.map((c) => (
+                <span
+                  key={c.label}
+                  className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                  style={{ color: c.color, backgroundColor: c.bg, border: `1px solid ${c.border}` }}
+                >
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Income ceiling from Monotributo category */}
+        {afipData.esMonotributista && mensualMax !== null && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                Facturación máx. habilitada
+              </span>
+              <span className="text-xl font-extrabold text-slate-900 tabular-nums leading-tight">
+                $ {formatIncome(mensualMax)} / mes
+              </span>
+              <span className="text-xs font-light text-slate-400">
+                tope Monotributo Cat. {afipData.categoria} · aprox.
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                Perfil tributario
+              </span>
+              <span className="text-sm font-light text-slate-700 leading-relaxed">
+                {afipData.categoria && ["A", "B"].includes(afipData.categoria)
+                  ? "Pequeño contribuyente — ingresos bajos"
+                  : afipData.categoria && ["C", "D", "E"].includes(afipData.categoria)
+                  ? "Contribuyente medio — ingresos moderados"
+                  : "Contribuyente activo — ingresos altos para monotributo"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+                Nota
+              </span>
+              <span className="text-xs font-light text-slate-400 leading-relaxed">
+                El tope de facturación no equivale al ingreso neto real. Actualizable
+                cada cuatrimestre por AFIP.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Inactive warning */}
+        {!afipData.estadoActivo && (
+          <div className="p-4 rounded-xl border border-red-100 bg-red-50">
+            <p className="text-xs font-light text-red-700 leading-relaxed">
+              La clave fiscal figura como <strong>inactiva o bloqueada</strong> en el padrón de AFIP.
+              Esto puede indicar que la persona no ejerce actividad formal registrada actualmente.
+            </p>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
