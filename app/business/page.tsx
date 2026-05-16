@@ -5,6 +5,7 @@ import { supabase, getSupabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
+import { SearchForm } from "@/app/business/SearchForm";
 import { saveNote } from "@/app/actions/business";
 import { ReviewForm } from "@/app/business/ReviewForm";
 import { PrintButton } from "@/app/business/PrintButton";
@@ -333,115 +334,13 @@ export default async function BusinessDashboard(props: {
         </div>
 
         {/* ── BUSCADOR ── */}
-        {/*
-          Native form with method="get" — no JS required.
-          On submit, navigates to /business?cuit=... and the Server Component
-          re-renders with the new searchParams.
-        */}
-        <form
-          id="search-form"
-          method="get"
-          action="/business"
-          className="bg-white border border-slate-200 rounded-2xl px-8 py-7 flex flex-col gap-5"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="cuit-input"
-                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
-              >
-                TITULAR
-              </label>
-              <input
-                id="cuit-input"
-                type="text"
-                name="cuit"
-                defaultValue={searchParams.cuit ?? ""}
-                placeholder="DNI o CUIL sin guiones"
-                className="
-                  w-full text-2xl font-light text-slate-800 bg-transparent
-                  border-0 border-b-2 border-slate-200
-                  py-3 px-0
-                  placeholder:text-slate-300
-                  focus:outline-none focus:border-slate-700
-                  transition-colors
-                "
-              />
-              <p className="text-xs font-light text-slate-400 tracking-wide">
-                DNI o CUIL sin guiones.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="garante-input"
-                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
-              >
-                GARANTE <span className="font-light normal-case tracking-normal">(opcional)</span>
-              </label>
-              <input
-                id="garante-input"
-                type="text"
-                name="garante"
-                defaultValue={searchParams.garante ?? ""}
-                placeholder="DNI o CUIL sin guiones"
-                className="
-                  w-full text-2xl font-light text-slate-800 bg-transparent
-                  border-0 border-b-2 border-slate-200
-                  py-3 px-0
-                  placeholder:text-slate-300
-                  focus:outline-none focus:border-slate-700
-                  transition-colors
-                "
-              />
-              <p className="text-xs font-light text-slate-400 tracking-wide">
-                Co-firmante o avalista de la operación.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="income-input"
-                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
-              >
-                INGRESO MENSUAL <span className="font-light normal-case tracking-normal">(opcional)</span>
-              </label>
-              <input
-                id="income-input"
-                type="number"
-                name="income"
-                min="0"
-                defaultValue={searchParams.income ?? ""}
-                placeholder="ARS"
-                className="
-                  w-full text-2xl font-light text-slate-800 bg-transparent
-                  border-0 border-b-2 border-slate-200
-                  py-3 px-0
-                  placeholder:text-slate-300
-                  focus:outline-none focus:border-slate-700
-                  transition-colors
-                "
-              />
-              <p className="text-xs font-light text-slate-400 tracking-wide">
-                Para calcular ratio deuda / ingreso.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="
-                px-10 py-4 rounded-xl
-                text-[11px] font-black tracking-[0.25em] text-white
-                hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer
-              "
-              style={{ backgroundColor: "var(--color-secondary)" }}
-            >
-              CONSULTAR
-            </button>
-          </div>
-        </form>
+        <SearchForm
+          defaultCuit={searchParams.cuit ?? ""}
+          defaultGarante={searchParams.garante ?? ""}
+          defaultIncome={searchParams.income ?? ""}
+          queriesUsed={company.queries_used}
+          monthlyQuota={company.monthly_quota}
+        />
 
         {/* ── VEREDICTO CONJUNTO (solo cuando hay garante) ── */}
         {result && garanteProfile && (

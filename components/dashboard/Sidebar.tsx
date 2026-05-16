@@ -12,10 +12,12 @@ const NAV_ITEMS = [
 ] as const;
 
 interface SidebarProps {
-  companyName: string;
+  companyName:  string;
+  queriesUsed:  number;
+  monthlyQuota: number;
 }
 
-export default function Sidebar({ companyName }: SidebarProps) {
+export default function Sidebar({ companyName, queriesUsed, monthlyQuota }: SidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -101,8 +103,40 @@ export default function Sidebar({ companyName }: SidebarProps) {
           })}
         </nav>
 
+        {/* Quota indicator */}
+        <div className="px-6 py-5 border-t border-slate-100 flex flex-col gap-2">
+          {(() => {
+            const pct      = monthlyQuota > 0 ? Math.min(100, Math.round((queriesUsed / monthlyQuota) * 100)) : 0
+            const critical = pct >= 80
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black tracking-[0.3em] text-slate-300 uppercase">
+                    CUOTA
+                  </span>
+                  <span
+                    className="text-[9px] font-black tracking-widest"
+                    style={critical ? { color: '#dc2626' } : { color: '#94a3b8' }}
+                  >
+                    {queriesUsed} / {monthlyQuota}
+                  </span>
+                </div>
+                <div className="w-full h-0.5 bg-slate-100">
+                  <div
+                    className="h-0.5 transition-all duration-500"
+                    style={{
+                      width:           `${pct}%`,
+                      backgroundColor: critical ? '#dc2626' : 'var(--color-secondary)',
+                    }}
+                  />
+                </div>
+              </>
+            )
+          })()}
+        </div>
+
         {/* Sign out */}
-        <div className="px-3 py-6 border-t border-slate-100">
+        <div className="px-3 py-4 border-t border-slate-100">
           <form action={signOut}>
             <button
               type="submit"
