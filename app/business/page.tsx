@@ -7,6 +7,7 @@ import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { saveNote } from "@/app/actions/business";
 import { ReviewForm } from "@/app/business/ReviewForm";
+import { PrintButton } from "@/app/business/PrintButton";
 import { generateAnalystVerdict } from "@/lib/utils/scoring";
 import type { TrendDirection } from "@/lib/utils/scoring";
 import { fetchAfipData, afipIngresoMensualMax } from "@/lib/services/afipService";
@@ -243,6 +244,9 @@ export default async function BusinessDashboard(props: {
 
           /* Keep debt table together */
           #debt-table { page-break-inside: avoid; }
+
+          /* Dictamen sello — keep together, prominent border */
+          #dictamen-formal { page-break-inside: avoid; border: 2px solid #000 !important; }
         }
       `}</style>
 
@@ -651,6 +655,115 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
 }
 
 // ─────────────────────────────────────────────
+// Dictamen formal — printable verdict stamp
+// ─────────────────────────────────────────────
+
+type DictamenVerdict = 'aprobado' | 'requiere_garante' | 'no_aprobado';
+
+function getDictamenVerdict(bcraScore: number, apptoScore: number): DictamenVerdict {
+  if (bcraScore >= 4) return 'no_aprobado';
+  if (bcraScore >= 2 || apptoScore < 700) return 'requiere_garante';
+  return 'aprobado';
+}
+
+const DICTAMEN_CONFIG: Record<DictamenVerdict, { label: string; color: string }> = {
+  aprobado:         { label: 'APROBADO',        color: '#16a34a' },
+  requiere_garante: { label: 'REQUIERE GARANTE', color: '#d97706' },
+  no_aprobado:      { label: 'NO APROBADO',      color: '#dc2626' },
+};
+
+function DictamenSello({ profile }: { profile: Profile }) {
+  const apptoScore = profile.appto_score ?? 0;
+  const verdict    = getDictamenVerdict(profile.bcra_score, apptoScore);
+  const cfg        = DICTAMEN_CONFIG[verdict];
+  const ref        = profile.id.slice(-8).toUpperCase();
+  const bcraLabel  = profile.bcra_score === 1
+    ? 'Situación 1 — Normal'
+    : `Situación ${profile.bcra_score} — Riesgo`;
+  const dateLabel  = new Date().toLocaleDateString('es-AR', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  }).toUpperCase();
+
+  return (
+    <div
+      id="dictamen-formal"
+      className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
+    >
+      {/* Header */}
+      <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            Dictamen Formal
+          </h2>
+          <p className="text-xs font-light text-slate-400">
+            Documento para adjuntar a la carpeta del cliente.
+          </p>
+        </div>
+        <PrintButton />
+      </div>
+
+      {/* Body */}
+      <div className="px-10 py-10 flex flex-col items-center gap-8">
+
+        {/* Sello */}
+        <div
+          className="w-full max-w-lg flex flex-col items-center justify-center py-10 px-8"
+          style={{ border: `4px solid ${cfg.color}` }}
+        >
+          <span
+            className="text-[9px] font-black tracking-[0.5em] uppercase mb-6"
+            style={{ color: cfg.color, fontFamily: 'var(--font-geist-mono), monospace' }}
+          >
+            DICTAMEN CREDITICIO ΛPPTO
+          </span>
+          <span
+            className="text-5xl md:text-6xl font-black tracking-tight text-center leading-none"
+            style={{ color: cfg.color }}
+          >
+            {cfg.label}
+          </span>
+          <span
+            className="text-[9px] font-light tracking-[0.3em] uppercase mt-6"
+            style={{ color: cfg.color, fontFamily: 'var(--font-geist-mono), monospace' }}
+          >
+            REF: {ref} · {dateLabel}
+          </span>
+        </div>
+
+        {/* Data rows */}
+        <div
+          className="w-full max-w-lg border border-slate-200 divide-y divide-slate-100"
+          style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+        >
+          {[
+            { label: 'IDENTIFICACIÓN', value: profile.cuit },
+            { label: 'DENOMINACIÓN',   value: profile.full_name },
+            { label: 'SCORE ΛPPTO',    value: `${apptoScore} / 1000` },
+            { label: 'SITUACIÓN BCRA', value: bcraLabel },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex items-center px-6 py-3 gap-4">
+              <span className="text-[9px] font-black tracking-[0.3em] text-slate-400 uppercase w-40 shrink-0">
+                {label}
+              </span>
+              <span className="text-sm font-light text-slate-800">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Legal */}
+        <p
+          className="text-[9px] font-light text-slate-400 text-center max-w-lg leading-relaxed tracking-wide"
+          style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+        >
+          DICTAMEN EMITIDO POR ΛPPTO EL {dateLabel}. LOS DATOS PROVIENEN DE FUENTES PÚBLICAS.
+          ESTE DOCUMENTO ES DE CARÁCTER ESTRICTAMENTE INFORMATIVO Y NO CONSTITUYE UNA DECISIÓN CREDITICIA VINCULANTE.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
@@ -820,6 +933,9 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes,
           </div>
         )}
       </div>
+
+      {/* ── DICTAMEN FORMAL ── */}
+      <DictamenSello profile={profile} />
 
       {/* ── ESTADO FISCAL AFIP ── */}
       {afipData && <AfipSection afipData={afipData} />}
