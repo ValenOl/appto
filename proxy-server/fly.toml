@@ -1,5 +1,5 @@
 app            = "appto-bcra-proxy"
-primary_region = "gru"
+primary_region = "scl"
 
 [build]
 

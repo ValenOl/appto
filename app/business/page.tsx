@@ -7,6 +7,7 @@ import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { saveNote } from "@/app/actions/business";
 import { generateAnalystVerdict } from "@/lib/utils/scoring";
+import type { TrendDirection } from "@/lib/utils/scoring";
 import type {
   Company,
   Profile,
@@ -14,6 +15,7 @@ import type {
   DebtEntry,
   ReviewWithCompany,
   GuarantorLinkWithProfile,
+  SituacionPoint,
 } from "@/types/database";
 
 // ─────────────────────────────────────────────
@@ -723,13 +725,47 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
 
           <div className="flex flex-col gap-2 pt-6 md:pt-0 md:pl-10">
             <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
-              INGRESOS ESTIMADOS
+              TENDENCIA 24M
             </span>
-            <span className="text-2xl font-extrabold text-slate-900 leading-tight">
-              $ {formatIncome(profile.estimated_income)}
+            <TrendBadge trend={profile.trend as TrendDirection | null} />
+            <span className="text-sm font-light text-slate-500">
+              Evolución situación BCRA
             </span>
           </div>
         </div>
+
+        {/* ── SPARKLINE ── */}
+        {profile.situacion_history && (profile.situacion_history as SituacionPoint[]).length > 1 && (
+          <div className="px-10 py-7 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[9px] font-black tracking-[0.4em] text-slate-400 uppercase">
+                Evolución situación BCRA — últimos 24 meses
+              </span>
+              <span
+                className="text-[9px] font-light text-slate-300"
+                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              >
+                {(profile.situacion_history as SituacionPoint[])[0].periodo}
+                {" → "}
+                {(profile.situacion_history as SituacionPoint[]).slice(-1)[0].periodo}
+              </span>
+            </div>
+            <SituacionSparkline
+              history={profile.situacion_history as SituacionPoint[]}
+              trend={(profile.trend as TrendDirection) ?? 'estable'}
+            />
+            <div className="flex items-center gap-6 mt-3">
+              <div className="flex items-center gap-2">
+                <div className="w-4 border-t border-slate-300" />
+                <span className="text-[9px] font-light text-slate-400">SIT. 1 · NORMAL</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 border-t-2 border-red-300" />
+                <span className="text-[9px] font-light text-slate-400">SIT. 6 · IRRECUPERABLE</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── DICTAMEN DEL ANALISTA IA ── */}
@@ -1006,5 +1042,106 @@ function AnalystVerdict({
         </span>
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Trend badge — directional indicator
+// ─────────────────────────────────────────────
+
+function TrendBadge({ trend }: { trend: TrendDirection | null }) {
+  if (!trend) {
+    return (
+      <span className="text-2xl font-extrabold text-slate-200">—</span>
+    );
+  }
+
+  const config: Record<TrendDirection, { label: string; color: string; bg: string; border: string }> = {
+    mejorando:  { label: 'EN MEJORA',    color: '#16a34a', bg: 'rgba(22,163,74,0.06)',   border: 'rgba(22,163,74,0.25)'   },
+    estable:    { label: 'ESTABLE',      color: '#64748b', bg: 'rgba(100,116,139,0.06)', border: 'rgba(100,116,139,0.25)' },
+    empeorando: { label: 'EN DETERIORO', color: '#dc2626', bg: 'rgba(220,38,38,0.06)',   border: 'rgba(220,38,38,0.25)'   },
+  };
+
+  const { label, color, bg, border } = config[trend];
+
+  return (
+    <span
+      className="self-start text-[10px] font-black tracking-[0.2em] px-3 py-1.5 rounded-lg"
+      style={{ color, backgroundColor: bg, border: `1px solid ${border}` }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Situacion sparkline — 24-month BCRA arc
+// ─────────────────────────────────────────────
+//
+// Risk convention: sit=1 (good) = bottom, sit=6 (bad) = top.
+// Area fills upward from the sit=1 baseline to the line —
+// more fill = more risk above the clean baseline.
+
+function SituacionSparkline({ history, trend }: { history: SituacionPoint[]; trend: TrendDirection }) {
+  if (history.length < 2) return null;
+
+  const W = 500, H = 72, PAD_X = 4, PAD_Y = 10;
+  const n = history.length;
+
+  const trendColor =
+    trend === 'mejorando'  ? '#16a34a' :
+    trend === 'empeorando' ? '#dc2626' :
+    '#94a3b8';
+
+  const baselineY = H - PAD_Y;
+
+  // sit=1 → bottom (baselineY), sit=6 → top (PAD_Y)
+  const toX = (i: number)   => PAD_X + (i / (n - 1)) * (W - PAD_X * 2);
+  const toY = (sit: number) => baselineY - ((sit - 1) / 5) * (H - PAD_Y * 2);
+
+  const polylinePoints = history
+    .map((p, i) => `${toX(i).toFixed(1)},${toY(p.situacion).toFixed(1)}`)
+    .join(' ');
+
+  // Area: from baseline up to the polyline and back down
+  const areaD = [
+    `M ${toX(0).toFixed(1)},${baselineY}`,
+    `L ${toX(0).toFixed(1)},${toY(history[0].situacion).toFixed(1)}`,
+    ...history.slice(1).map((p, i) =>
+      `L ${toX(i + 1).toFixed(1)},${toY(p.situacion).toFixed(1)}`
+    ),
+    `L ${toX(n - 1).toFixed(1)},${baselineY}`,
+    'Z',
+  ].join(' ');
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="w-full"
+      style={{ height: '64px' }}
+      aria-hidden="true"
+    >
+      {/* Baseline: sit=1 (clean) */}
+      <line
+        x1={PAD_X} y1={baselineY}
+        x2={W - PAD_X} y2={baselineY}
+        stroke="#e2e8f0" strokeWidth="1"
+      />
+      {/* Area fill */}
+      <path d={areaD} fill={trendColor} fillOpacity="0.08" />
+      {/* Sparkline */}
+      <polyline
+        points={polylinePoints}
+        fill="none"
+        stroke={trendColor}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {/* First and last dots */}
+      <circle cx={toX(0)}     cy={toY(history[0].situacion)}     r="3" fill={trendColor} fillOpacity="0.5" />
+      <circle cx={toX(n - 1)} cy={toY(history[n - 1].situacion)} r="3" fill={trendColor} />
+    </svg>
   );
 }

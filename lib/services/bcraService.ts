@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import type { Profile, DebtEntry } from "@/types/database";
-import { calculateApptoScore } from "@/lib/utils/scoring";
+import type { Profile, DebtEntry, SituacionPoint } from "@/types/database";
+import { calculateApptoScore, calculateTrend } from "@/lib/utils/scoring";
 import { DNI_PREFIXES, buildCuil } from "@/lib/utils/cuitHelper";
 
 // Requests go through a self-hosted Fastify proxy on Fly.io (São Paulo, gru).
@@ -208,14 +208,27 @@ async function buildAndPersistProfile(
     monto:       e.monto,
   }));
 
+  // Build chronological situacion history (BCRA returns newest-first, we reverse it)
+  const situacion_history: SituacionPoint[] =
+    [...(historial?.periodos ?? [])].reverse().map((p) => ({
+      periodo:   p.periodo,
+      situacion: p.situacion,
+    }));
+
+  const trend = situacion_history.length >= 4
+    ? calculateTrend(situacion_history)
+    : null;
+
   const payload = {
     cuit,
-    full_name:        denominacion,
-    bcra_score:       worstSituacion,
-    appto_score:      apptoScore,
-    estimated_income: 0,
-    debt_detail:      debtDetail,
-    created_at:       new Date().toISOString(),
+    full_name:         denominacion,
+    bcra_score:        worstSituacion,
+    appto_score:       apptoScore,
+    estimated_income:  0,
+    debt_detail:       debtDetail,
+    situacion_history: situacion_history.length > 0 ? situacion_history : null,
+    trend,
+    created_at:        new Date().toISOString(),
   };
 
   const { data, error } = await (supabase as any)

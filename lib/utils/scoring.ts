@@ -3,7 +3,7 @@ import type {
   BcraHistorialResults,
   BcraChequesResults,
 } from "@/lib/services/bcraService";
-import type { DebtEntry } from "@/types/database";
+import type { DebtEntry, SituacionPoint } from "@/types/database";
 
 // ── Penalty constants ─────────────────────────────────────────────────────
 
@@ -139,4 +139,31 @@ export function generateAnalystVerdict(
   }
 
   return "Perfil con historial crediticio regular. Se recomienda evaluar antecedentes de pago antes de aprobar nuevas operaciones.";
+}
+
+// ── Trend analysis ────────────────────────────────────────────────────────
+//
+// Compares average situacion of the last 3 months vs the 3 months before that.
+// Requires at least 4 data points to be meaningful.
+// situacion: lower = better (1=normal, 6=irrecuperable), so a negative delta means improvement.
+
+export type TrendDirection = 'mejorando' | 'estable' | 'empeorando';
+
+export function calculateTrend(history: SituacionPoint[]): TrendDirection {
+  if (history.length < 4) return 'estable';
+
+  // history is chronological (oldest first)
+  const recent   = history.slice(-3);
+  const previous = history.slice(-6, -3);
+
+  if (previous.length === 0) return 'estable';
+
+  const recentAvg   = recent.reduce((s, p) => s + p.situacion, 0) / recent.length;
+  const previousAvg = previous.reduce((s, p) => s + p.situacion, 0) / previous.length;
+
+  const delta = recentAvg - previousAvg;
+
+  if (delta < -0.25) return 'mejorando';   // situacion bajó = mejor
+  if (delta > 0.25)  return 'empeorando';  // situacion subió = peor
+  return 'estable';
 }

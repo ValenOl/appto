@@ -4,6 +4,11 @@ export interface DebtEntry {
   monto:       number
 }
 
+export interface SituacionPoint {
+  periodo:   string   // "YYYY-MM"
+  situacion: number   // 1–6
+}
+
 
 export type Database = {
   public: {
@@ -50,37 +55,43 @@ export type Database = {
 
       profiles: {
         Row: {
-          id:               string
-          cuit:             string
-          full_name:        string
-          bcra_score:       number
-          appto_score:      number
-          estimated_income: number
-          user_id:          string | null
-          created_at:       string
-          debt_detail:      DebtEntry[] | null
-        }
-        Insert: {
-          id?:               string
+          id:                string
           cuit:              string
           full_name:         string
           bcra_score:        number
-          appto_score?:      number
+          appto_score:       number
           estimated_income:  number
-          user_id?:          string | null
-          created_at?:       string
-          debt_detail?:      DebtEntry[] | null
+          user_id:           string | null
+          created_at:        string
+          debt_detail:       DebtEntry[] | null
+          situacion_history: SituacionPoint[] | null
+          trend:             string | null
+        }
+        Insert: {
+          id?:                string
+          cuit:               string
+          full_name:          string
+          bcra_score:         number
+          appto_score?:       number
+          estimated_income:   number
+          user_id?:           string | null
+          created_at?:        string
+          debt_detail?:       DebtEntry[] | null
+          situacion_history?: SituacionPoint[] | null
+          trend?:             string | null
         }
         Update: {
-          id?:               string
-          cuit?:             string
-          full_name?:        string
-          bcra_score?:       number
-          appto_score?:      number
-          estimated_income?: number
-          user_id?:          string | null
-          created_at?:       string
-          debt_detail?:      DebtEntry[] | null
+          id?:                string
+          cuit?:              string
+          full_name?:         string
+          bcra_score?:        number
+          appto_score?:       number
+          estimated_income?:  number
+          user_id?:           string | null
+          created_at?:        string
+          debt_detail?:       DebtEntry[] | null
+          situacion_history?: SituacionPoint[] | null
+          trend?:             string | null
         }
       }
 
