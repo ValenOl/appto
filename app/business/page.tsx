@@ -1,7 +1,7 @@
 export const preferredRegion = 'iad1'; // Washington DC — failover after gru1 block
 
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSupabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
@@ -39,6 +39,22 @@ import type {
 //
 // ─────────────────────────────────────────────
 
+
+async function linkProfiles(primaryId: string, linkedId: string): Promise<void> {
+  const admin = getSupabaseAdmin();
+  const { data: existing } = await (admin as any)
+    .from("guarantor_links")
+    .select("id")
+    .eq("primary_profile_id", primaryId)
+    .eq("linked_profile_id", linkedId)
+    .maybeSingle();
+  if (existing) return;
+  await (admin as any).from("guarantor_links").insert({
+    primary_profile_id: primaryId,
+    linked_profile_id:  linkedId,
+    relation_type:      "GARANTE",
+  });
+}
 
 async function consumeCredit(companyId: string): Promise<Company | null> {
   const { data, error } = await (supabase as any).rpc("consume_credit", {
@@ -114,7 +130,7 @@ async function getProfileContext(
 // ─────────────────────────────────────────────
 
 export default async function BusinessDashboard(props: {
-  searchParams: Promise<{ cuit?: string; income?: string }>;
+  searchParams: Promise<{ cuit?: string; income?: string; garante?: string }>;
 }) {
   // ── Auth & Subscription Gate ──────────────────
   const authClient = await createClient();
@@ -135,8 +151,9 @@ export default async function BusinessDashboard(props: {
   }
   // ─────────────────────────────────────────────
 
-  const searchParams = await props.searchParams;
-  const rawCuit      = searchParams.cuit?.replace(/\D/g, '')   || undefined;
+  const searchParams   = await props.searchParams;
+  const rawCuit        = searchParams.cuit?.replace(/\D/g, '')    || undefined;
+  const rawGarante     = searchParams.garante?.replace(/\D/g, '') || undefined;
   const declaredIncome = parseInt(searchParams.income?.replace(/\D/g, '') ?? '0', 10) || 0;
 
   let quotaExhausted = false;
@@ -148,6 +165,8 @@ export default async function BusinessDashboard(props: {
   let apiError  = false;   // BCRA API down / network failure — do not treat as Estado A
   let priorNote: Note | null = null;
   let internalNotes: Note[] = [];
+  let garanteProfile: Profile | null = null;
+  let garanteNoRecords = false;
 
   if (rawCuit) {
     let fetchOutcome: Awaited<ReturnType<typeof getOrFetchProfile>>;
@@ -186,6 +205,27 @@ export default async function BusinessDashboard(props: {
         ) {
           zeroDebt = true;
         }
+
+        // ── Garante fetch + link ───────────────────────────────────────────
+        // Runs BEFORE getProfileContext so the link is already in DB when
+        // GroupEvaluationSection queries guarantor_links.
+        if (rawGarante) {
+          try {
+            const garanteOutcome = await getOrFetchProfile(rawGarante, company.id);
+            if (garanteOutcome === null) {
+              garanteNoRecords = true;
+            } else {
+              if (garanteOutcome.isNew) {
+                await consumeCredit(company.id); // best-effort, ignore if quota edge
+              }
+              garanteProfile = garanteOutcome.profile;
+              await linkProfiles(fetchOutcome.profile.id, garanteOutcome.profile.id);
+            }
+          } catch {
+            // garante fetch error — show titular results regardless
+          }
+        }
+        // ──────────────────────────────────────────────────────────────────
 
         const [profileCtx, afipFetch, { data: notesData }] = await Promise.all([
           getProfileContext(fetchOutcome.profile, authClient),
@@ -300,13 +340,13 @@ export default async function BusinessDashboard(props: {
           action="/business"
           className="bg-white border border-slate-200 rounded-2xl px-8 py-7 flex flex-col gap-5"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="flex flex-col gap-2">
               <label
                 htmlFor="cuit-input"
                 className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
               >
-                IDENTIFICACIÓN FISCAL
+                TITULAR
               </label>
               <input
                 id="cuit-input"
@@ -324,7 +364,34 @@ export default async function BusinessDashboard(props: {
                 "
               />
               <p className="text-xs font-light text-slate-400 tracking-wide">
-                Podés ingresar DNI o CUIL completo sin guiones. Con 11 dígitos se busca directamente.
+                DNI o CUIL sin guiones.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="garante-input"
+                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
+              >
+                GARANTE <span className="font-light normal-case tracking-normal">(opcional)</span>
+              </label>
+              <input
+                id="garante-input"
+                type="text"
+                name="garante"
+                defaultValue={searchParams.garante ?? ""}
+                placeholder="DNI o CUIL sin guiones"
+                className="
+                  w-full text-2xl font-light text-slate-800 bg-transparent
+                  border-0 border-b-2 border-slate-200
+                  py-3 px-0
+                  placeholder:text-slate-300
+                  focus:outline-none focus:border-slate-700
+                  transition-colors
+                "
+              />
+              <p className="text-xs font-light text-slate-400 tracking-wide">
+                Co-firmante o avalista de la operación.
               </p>
             </div>
 
@@ -371,6 +438,26 @@ export default async function BusinessDashboard(props: {
             </button>
           </div>
         </form>
+
+        {/* ── VEREDICTO CONJUNTO (solo cuando hay garante) ── */}
+        {result && garanteProfile && (
+          <OperacionVeredicto titular={result.profile} garante={garanteProfile} />
+        )}
+        {rawGarante && result && garanteNoRecords && (
+          <div className="bg-white border border-amber-200 rounded-2xl px-10 py-8 flex flex-col gap-2"
+               style={{ borderLeft: "4px solid #d97706" }}>
+            <span className="text-[10px] font-black tracking-[0.35em] text-amber-600 uppercase">
+              Garante no encontrado
+            </span>
+            <p className="text-sm font-light text-slate-500">
+              El garante{" "}
+              <span className="font-bold tracking-widest" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                {rawGarante}
+              </span>{" "}
+              no registra actividad en el BCRA. Se muestra solo el perfil del titular.
+            </p>
+          </div>
+        )}
 
         {/* ── ESTADOS ── */}
         {!rawCuit ? (
@@ -649,6 +736,120 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
         >
           [ ACTUALIZAR PLAN ]
         </a>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Operacion veredicto — joint titular + garante
+// ─────────────────────────────────────────────
+
+type OperacionStatus = 'viable' | 'con_condiciones' | 'no_recomendada';
+
+function getOperacionStatus(
+  titularBcra: number, titularScore: number,
+  garanteBcra: number, garanteScore: number,
+): OperacionStatus {
+  const worstBcra = Math.max(titularBcra, garanteBcra);
+  const minScore  = Math.min(titularScore, garanteScore);
+  if (worstBcra === 1 && minScore >= 700) return 'viable';
+  if (worstBcra <= 3 && minScore >= 400)  return 'con_condiciones';
+  return 'no_recomendada';
+}
+
+function generateOperacionText(
+  titular: Profile, garante: Profile, status: OperacionStatus,
+): string {
+  const t = titular.bcra_score === 1
+    ? `El titular figura en Situación Normal con score ${titular.appto_score ?? 0}/1000.`
+    : `El titular registra Situación ${titular.bcra_score} en el BCRA con score ${titular.appto_score ?? 0}/1000.`;
+  const g = garante.bcra_score === 1
+    ? `El garante figura en Situación Normal con score ${garante.appto_score ?? 0}/1000.`
+    : `El garante registra Situación ${garante.bcra_score} con score ${garante.appto_score ?? 0}/1000.`;
+
+  if (status === 'viable')
+    return `${t} ${g} Ambos perfiles califican. La operación es viable sin observaciones adicionales.`;
+  if (status === 'con_condiciones')
+    return `${t} ${g} La operación puede avanzar con el garante como co-firmante, sujeta a condiciones comerciales adicionales.`;
+  return `${t} ${g} El riesgo combinado supera los umbrales recomendados. La operación no es recomendada en las condiciones actuales.`;
+}
+
+const OPERACION_CONFIG: Record<OperacionStatus, { label: string; color: string; bg: string; border: string }> = {
+  viable:          { label: 'OPERACIÓN VIABLE',          color: '#16a34a', bg: 'rgba(22,163,74,0.04)',   border: '#16a34a' },
+  con_condiciones: { label: 'VIABLE CON GARANTE',         color: '#d97706', bg: 'rgba(217,119,6,0.04)',   border: '#d97706' },
+  no_recomendada:  { label: 'OPERACIÓN NO RECOMENDADA',   color: '#dc2626', bg: 'rgba(220,38,38,0.04)',   border: '#dc2626' },
+};
+
+function OperacionVeredicto({ titular, garante }: { titular: Profile; garante: Profile }) {
+  const status = getOperacionStatus(
+    titular.bcra_score, titular.appto_score ?? 0,
+    garante.bcra_score, garante.appto_score ?? 0,
+  );
+  const cfg  = OPERACION_CONFIG[status];
+  const text = generateOperacionText(titular, garante, status);
+
+  return (
+    <div
+      className="bg-white border rounded-2xl overflow-hidden"
+      style={{ borderColor: cfg.border, borderLeft: `4px solid ${cfg.border}` }}
+    >
+      {/* Header */}
+      <div className="px-10 py-6 border-b border-slate-100">
+        <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase">
+          EVALUACIÓN DE OPERACIÓN
+        </span>
+      </div>
+
+      {/* Perfiles lado a lado */}
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+        {[
+          { label: 'TITULAR',  p: titular },
+          { label: 'GARANTE',  p: garante },
+        ].map(({ label, p }) => (
+          <div key={label} className="px-10 py-7 flex flex-col gap-2">
+            <span className="text-[9px] font-black tracking-[0.4em] text-slate-400 uppercase">
+              {label}
+            </span>
+            <span className="text-lg font-black text-slate-900 leading-tight">
+              {p.full_name}
+            </span>
+            <span
+              className="text-xs font-light text-slate-400 tracking-widest"
+              style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+            >
+              {p.cuit}
+            </span>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5 bg-slate-100 text-slate-600">
+                ΛPPTO {p.appto_score ?? 0} / 1000
+              </span>
+              <span
+                className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5"
+                style={
+                  p.bcra_score === 1
+                    ? { backgroundColor: 'rgba(22,163,74,0.06)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }
+                    : { backgroundColor: 'rgba(220,38,38,0.06)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)' }
+                }
+              >
+                BCRA SIT. {p.bcra_score}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Veredicto */}
+      <div className="px-10 py-8 border-t border-slate-100" style={{ backgroundColor: cfg.bg }}>
+        <span
+          className="text-2xl md:text-3xl font-black tracking-tight"
+          style={{ color: cfg.color }}
+        >
+          {cfg.label}
+        </span>
+        <p className="text-sm font-light text-slate-600 leading-relaxed max-w-3xl mt-3">
+          {text}
+        </p>
       </div>
     </div>
   );
