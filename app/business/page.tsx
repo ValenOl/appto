@@ -255,38 +255,38 @@ export default async function BusinessDashboard(props: {
       <style>{`
         @media print {
           @page { margin: 2cm; size: A4 portrait; }
-
-          /* Remove screen chrome */
           body { background: white !important; }
           * { box-shadow: none !important; }
 
-          /* Flatten all color fills — keep borders, reset them to light gray */
-          *, *::before, *::after { background-color: white !important; }
-          [class*="border"] { border-color: #d1d5db !important; }
-
-          /* All text black */
-          * { color: #000 !important; }
-
-          /* Strip rounded corners for a document feel */
-          * { border-radius: 0 !important; }
-
-          /* Hide interactive and non-report elements */
-          #search-form, #page-footer, button { display: none !important; }
-
-          /* Reveal print-only header */
-          #print-header { display: flex !important; }
-
-          /* Analyst verdict — stand out with a heavy left rule */
-          #analyst-verdict {
+          /* ── Reporte completo (Ctrl+P) ───────────────────────────────── */
+          body:not(.print-dictamen-only) *, body:not(.print-dictamen-only) *::before, body:not(.print-dictamen-only) *::after {
+            background-color: white !important;
+          }
+          body:not(.print-dictamen-only) [class*="border"] { border-color: #d1d5db !important; }
+          body:not(.print-dictamen-only) * { color: #000 !important; border-radius: 0 !important; }
+          body:not(.print-dictamen-only) #search-form,
+          body:not(.print-dictamen-only) #page-footer,
+          body:not(.print-dictamen-only) button { display: none !important; }
+          body:not(.print-dictamen-only) #print-header { display: flex !important; }
+          body:not(.print-dictamen-only) #analyst-verdict {
             border-left: 4px solid #000 !important;
             padding-left: 20px !important;
           }
+          body:not(.print-dictamen-only) #debt-table { page-break-inside: avoid; }
+          body:not(.print-dictamen-only) #dictamen-formal { page-break-inside: avoid; border: 2px solid #000 !important; }
 
-          /* Keep debt table together */
-          #debt-table { page-break-inside: avoid; }
-
-          /* Dictamen sello — keep together, prominent border */
-          #dictamen-formal { page-break-inside: avoid; border: 2px solid #000 !important; }
+          /* ── Solo dictamen (botón [ IMPRIMIR DICTAMEN ]) ─────────────── */
+          body.print-dictamen-only * { visibility: hidden !important; }
+          body.print-dictamen-only #dictamen-formal,
+          body.print-dictamen-only #dictamen-formal * { visibility: visible !important; }
+          body.print-dictamen-only #dictamen-formal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            border: none !important;
+            border-radius: 0 !important;
+          }
         }
       `}</style>
 
