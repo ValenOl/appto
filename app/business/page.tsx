@@ -76,9 +76,10 @@ interface ProfileData {
 }
 
 interface ResultsProps extends ProfileData {
-  companyId:     string;
-  priorNote:     Note | null;
-  internalNotes: Note[];
+  companyId:      string;
+  priorNote:      Note | null;
+  internalNotes:  Note[];
+  declaredIncome: number;
 }
 
 async function getProfileContext(profile: Profile): Promise<ProfileData> {
@@ -105,7 +106,7 @@ async function getProfileContext(profile: Profile): Promise<ProfileData> {
 // ─────────────────────────────────────────────
 
 export default async function BusinessDashboard(props: {
-  searchParams: Promise<{ cuit?: string }>;
+  searchParams: Promise<{ cuit?: string; income?: string }>;
 }) {
   // ── Auth & Subscription Gate ──────────────────
   const authClient = await createClient();
@@ -127,7 +128,8 @@ export default async function BusinessDashboard(props: {
   // ─────────────────────────────────────────────
 
   const searchParams = await props.searchParams;
-  const rawCuit = searchParams.cuit?.replace(/\D/g, '') || undefined;
+  const rawCuit      = searchParams.cuit?.replace(/\D/g, '')   || undefined;
+  const declaredIncome = parseInt(searchParams.income?.replace(/\D/g, '') ?? '0', 10) || 0;
 
   let quotaExhausted = false;
   let exhaustedPlanTier = "";
@@ -307,6 +309,35 @@ export default async function BusinessDashboard(props: {
               Podés ingresar DNI o CUIL completo sin guiones. Con 11 dígitos se busca directamente.
             </p>
           </div>
+
+          <div className="flex flex-col gap-2 md:w-52 shrink-0">
+            <label
+              htmlFor="income-input"
+              className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
+            >
+              INGRESO MENSUAL <span className="font-light normal-case tracking-normal">(opcional)</span>
+            </label>
+            <input
+              id="income-input"
+              type="number"
+              name="income"
+              min="0"
+              defaultValue={searchParams.income ?? ""}
+              placeholder="ARS"
+              className="
+                w-full text-xl font-light text-slate-800 bg-transparent
+                border-0 border-b-2 border-slate-200
+                py-3 px-0
+                placeholder:text-slate-300
+                focus:outline-none focus:border-slate-700
+                transition-colors
+              "
+            />
+            <p className="text-xs font-light text-slate-400 tracking-wide">
+              Para calcular ratio deuda / ingreso.
+            </p>
+          </div>
+
           <button
             type="submit"
             className="
@@ -356,6 +387,7 @@ export default async function BusinessDashboard(props: {
             companyId={company.id}
             priorNote={priorNote}
             internalNotes={internalNotes}
+            declaredIncome={declaredIncome}
           />
         )}
 
@@ -604,7 +636,7 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
 // Results — extracted to keep the page readable
 // ─────────────────────────────────────────────
 
-function Results({ profile, reviews, links, companyId, priorNote, internalNotes }: ResultsProps) {
+function Results({ profile, reviews, links, companyId, priorNote, internalNotes, declaredIncome }: ResultsProps) {
   const isApto = profile.bcra_score === 1
   const bcraLabel =
     profile.bcra_score === 1
@@ -784,6 +816,14 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
         apptoScore={profile.appto_score ?? 0}
         debtDetail={(profile.debt_detail ?? []) as DebtEntry[]}
       />
+
+      {/* ── ANÁLISIS DE CAPACIDAD ── */}
+      {declaredIncome > 0 && (
+        <CapacityAnalysis
+          declaredIncome={declaredIncome}
+          debtDetail={(profile.debt_detail ?? []) as DebtEntry[]}
+        />
+      )}
 
       {/* ── COMPOSICIÓN DE DEUDA ── */}
       {profile.debt_detail && (profile.debt_detail as DebtEntry[]).length > 0 && (
@@ -1076,6 +1116,127 @@ function SituacionSparkline({ history, trend }: { history: SituacionPoint[]; tre
       <circle cx={toX(n - 1)} cy={toY(history[n - 1].situacion)} r="3" fill={trendColor} />
     </svg>
   );
+}
+
+// ─────────────────────────────────────────────
+// Capacity analysis — debt vs declared income
+// ─────────────────────────────────────────────
+//
+// Only rendered when the analyst provides a declared income at search time.
+// Calculates: total debt in ARS, months of income to cancel, estimated
+// installment at 48 periods vs 30% income cap.
+
+function CapacityAnalysis({
+  declaredIncome,
+  debtDetail,
+}: {
+  declaredIncome: number;
+  debtDetail: DebtEntry[];
+}) {
+  const totalDebtArs     = debtDetail.reduce((s, e) => s + e.monto, 0) * 1_000
+  const annualIncome     = declaredIncome * 12
+  const monthsToCancel   = totalDebtArs > 0 ? totalDebtArs / declaredIncome : 0
+  const installment48    = totalDebtArs > 0 ? Math.round(totalDebtArs / 48)  : 0
+  const cap30pct         = Math.round(declaredIncome * 0.30)
+  const installmentRatio = cap30pct > 0 ? installment48 / cap30pct : 0
+  const debtToIncome     = annualIncome > 0 ? (totalDebtArs / annualIncome) * 100 : 0
+
+  const status =
+    debtToIncome === 0        ? 'sin_deuda' :
+    debtToIncome < 30         ? 'baja'      :
+    debtToIncome < 100        ? 'moderada'  :
+    debtToIncome < 300        ? 'elevada'   :
+    'critica'
+
+  const statusLabel: Record<string, string> = {
+    sin_deuda: 'SIN DEUDA ACTIVA',
+    baja:      'CAPACIDAD CONFIRMADA',
+    moderada:  'CAPACIDAD LIMITADA',
+    elevada:   'CAPACIDAD COMPROMETIDA',
+    critica:   'CAPACIDAD INSUFICIENTE',
+  }
+  const statusColor: Record<string, string> = {
+    sin_deuda: '#16a34a',
+    baja:      '#16a34a',
+    moderada:  '#d97706',
+    elevada:   '#dc2626',
+    critica:   '#991b1b',
+  }
+
+  const color = statusColor[status]
+
+  return (
+    <div
+      className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
+      style={{ borderLeft: `4px solid ${color}` }}
+    >
+      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            Análisis de Capacidad
+          </h2>
+          <p className="text-xs font-light text-slate-400 mt-1">
+            Basado en ingreso mensual declarado. No validado por ΛPPTO.
+          </p>
+        </div>
+        <span
+          className="self-start text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-lg"
+          style={{ color, backgroundColor: `${color}10`, border: `1px solid ${color}40` }}
+        >
+          {statusLabel[status]}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 px-10 py-8">
+        <div className="flex flex-col gap-2 pb-6 md:pb-0 md:pr-10">
+          <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+            Ingreso Mensual
+          </span>
+          <span className="text-xl font-extrabold text-slate-900 tabular-nums leading-tight">
+            $ {formatIncome(declaredIncome)}
+          </span>
+          <span className="text-xs font-light text-slate-400">declarado por la empresa</span>
+        </div>
+
+        <div className="flex flex-col gap-2 py-6 md:py-0 md:px-10">
+          <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+            Deuda / Ingreso Anual
+          </span>
+          <span className="text-xl font-extrabold tabular-nums leading-tight" style={{ color }}>
+            {totalDebtArs === 0 ? "0%" : `${debtToIncome.toFixed(0)}%`}
+          </span>
+          <span className="text-xs font-light text-slate-400">
+            {debtToIncome < 30 ? "dentro del rango" : "fuera del rango recomendado"}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2 py-6 md:py-0 md:px-10">
+          <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+            Meses para Cancelar
+          </span>
+          <span className="text-xl font-extrabold text-slate-900 tabular-nums leading-tight">
+            {totalDebtArs === 0 ? "—" : `${monthsToCancel.toFixed(1)} m`}
+          </span>
+          <span className="text-xs font-light text-slate-400">a ingreso total destinado</span>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-6 md:pt-0 md:pl-10">
+          <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
+            Cuota Est. 48 Meses
+          </span>
+          <span
+            className="text-xl font-extrabold tabular-nums leading-tight"
+            style={{ color: installmentRatio > 1 ? '#dc2626' : '#16a34a' }}
+          >
+            {totalDebtArs === 0 ? "—" : `$ ${formatIncome(installment48)}`}
+          </span>
+          <span className="text-xs font-light text-slate-400">
+            cap. 30%: $ {formatIncome(cap30pct)} / mes
+          </span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────
