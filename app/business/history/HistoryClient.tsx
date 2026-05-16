@@ -25,6 +25,30 @@ const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string
   sin_datos: { label: 'SIN DATOS', color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.25)'  },
 };
 
+function exportCSV(rows: SearchHistory[]) {
+  const headers = ['DENOMINACIÓN', 'CUIT / DNI', 'DICTAMEN', 'SCORE ΛPPTO', 'FECHA'];
+  const escape  = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
+  const lines = rows.map(r => [
+    escape(r.full_name ?? ''),
+    escape(r.query_target),
+    VERDICT_CONFIG[getVerdict(r.result_score)].label,
+    r.result_score != null ? String(r.result_score) : '',
+    formatDate(r.created_at),
+  ].join(','));
+
+  const csv  = [headers.join(','), ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const date = new Date().toISOString().slice(0, 10);
+
+  const a  = document.createElement('a');
+  a.href   = url;
+  a.download = `appto-historial-${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function HistoryClient({ rows }: { rows: SearchHistory[] }) {
   const [query, setQuery] = useState('');
 
@@ -73,26 +97,40 @@ export function HistoryClient({ rows }: { rows: SearchHistory[] }) {
         />
       </div>
 
-      {/* ── FILTRO ── */}
-      <div className="mb-6">
-        <input
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Filtrar por nombre o CUIT..."
+      {/* ── FILTRO + EXPORTAR ── */}
+      <div className="mb-6 flex flex-col md:flex-row md:items-start gap-3">
+        <div className="flex-1">
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Filtrar por nombre o CUIT..."
+            className="
+              w-full md:w-96 text-sm font-light text-slate-800 bg-white
+              border border-slate-200 px-5 py-3
+              placeholder:text-slate-300
+              focus:outline-none focus:border-slate-500
+              transition-colors
+            "
+          />
+          {query.trim() && (
+            <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase mt-2">
+              {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => exportCSV(filtered)}
           className="
-            w-full md:w-96 text-sm font-light text-slate-800 bg-white
-            border border-slate-200 px-5 py-3
-            placeholder:text-slate-300
-            focus:outline-none focus:border-slate-500
-            transition-colors
+            shrink-0 self-start px-6 py-3
+            text-[10px] font-black tracking-[0.25em] text-slate-500 uppercase
+            border border-slate-200 bg-white
+            hover:border-slate-400 hover:text-slate-900
+            transition-colors cursor-pointer
           "
-        />
-        {query.trim() && (
-          <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase mt-2">
-            {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
-          </p>
-        )}
+        >
+          [ EXPORTAR CSV ]
+        </button>
       </div>
 
       {/* ── TABLA ── */}
