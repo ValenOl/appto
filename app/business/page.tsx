@@ -21,6 +21,7 @@ import type {
   ReviewWithCompany,
   GuarantorLinkWithProfile,
   SituacionPoint,
+  SearchHistory,
 } from "@/types/database";
 
 // ─────────────────────────────────────────────
@@ -267,6 +268,18 @@ export default async function BusinessDashboard(props: {
     }
   }
 
+  // Recent searches — only fetched on idle state (no cuit in URL)
+  let recentSearches: SearchHistory[] = [];
+  if (!rawCuit) {
+    const { data: recent } = await authClient
+      .from("search_history")
+      .select("*")
+      .eq("company_id", company.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    recentSearches = (recent ?? []) as SearchHistory[];
+  }
+
   return (
     <div
       className="bg-slate-50"
@@ -364,7 +377,7 @@ export default async function BusinessDashboard(props: {
 
         {/* ── ESTADOS ── */}
         {!rawCuit ? (
-          <IdleState />
+          <IdleState recentSearches={recentSearches} />
         ) : apiError ? (
           <ApiError cuit={rawCuit} />
         ) : quotaExhausted ? (
@@ -414,23 +427,95 @@ export default async function BusinessDashboard(props: {
 // Idle state — no search submitted yet
 // ─────────────────────────────────────────────
 
-function IdleState() {
+type RecentVerdict = 'apto' | 'atencion' | 'riesgo' | 'sin_datos';
+
+function recentVerdict(score: number | null): RecentVerdict {
+  if (score === null) return 'sin_datos';
+  if (score >= 700)   return 'apto';
+  if (score >= 400)   return 'atencion';
+  return 'riesgo';
+}
+
+const RECENT_VERDICT_CFG: Record<RecentVerdict, { label: string; color: string; bg: string; border: string }> = {
+  apto:      { label: 'APTO',      color: '#16a34a', bg: 'rgba(22,163,74,0.06)',    border: 'rgba(22,163,74,0.25)'    },
+  atencion:  { label: 'ATENCIÓN',  color: '#d97706', bg: 'rgba(217,119,6,0.06)',    border: 'rgba(217,119,6,0.25)'    },
+  riesgo:    { label: 'RIESGO',    color: '#dc2626', bg: 'rgba(220,38,38,0.06)',    border: 'rgba(220,38,38,0.25)'    },
+  sin_datos: { label: 'SIN DATOS', color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.25)'  },
+};
+
+function IdleState({ recentSearches }: { recentSearches: SearchHistory[] }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl px-10 py-20 flex flex-col gap-6">
-      <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
-        MOTOR DE CONSULTAS
-      </span>
-      <h2 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-none">
-        INGRESAR CUIT
-        <br />
-        <span className="font-light text-slate-300">PARA INICIAR</span>
-        <br />
-        AUDITORÍA
-      </h2>
-      <p className="text-sm font-light text-slate-400 max-w-sm leading-relaxed">
-        Cada consulta descuenta un crédito de tu ciclo activo. Ingresá el CUIT
-        o CUIL del sujeto a evaluar en el buscador de arriba.
-      </p>
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+
+      {/* Hero */}
+      <div className="px-10 py-16 flex flex-col gap-6">
+        <span className="text-[10px] font-black tracking-[0.35em] text-slate-300 uppercase">
+          MOTOR DE CONSULTAS
+        </span>
+        <h2 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-none">
+          INGRESAR CUIT
+          <br />
+          <span className="font-light text-slate-300">PARA INICIAR</span>
+          <br />
+          AUDITORÍA
+        </h2>
+        <p className="text-sm font-light text-slate-400 max-w-sm leading-relaxed">
+          Cada consulta descuenta un crédito de tu ciclo activo. Ingresá el CUIT
+          o CUIL del sujeto a evaluar en el buscador de arriba.
+        </p>
+      </div>
+
+      {/* Recent searches */}
+      {recentSearches.length > 0 && (
+        <div className="border-t border-slate-100">
+          <div className="px-10 py-4 border-b border-slate-100">
+            <span className="text-[9px] font-black tracking-[0.4em] text-slate-300 uppercase">
+              CONSULTAS RECIENTES
+            </span>
+          </div>
+          {recentSearches.map((row) => {
+            const cfg = RECENT_VERDICT_CFG[recentVerdict(row.result_score)];
+            const date = new Date(row.created_at).toLocaleDateString('es-AR', {
+              day: '2-digit', month: 'short', year: 'numeric',
+            }).toUpperCase();
+            return (
+              <a
+                key={row.id}
+                href={`/business?cuit=${row.query_target}`}
+                className="flex items-center justify-between px-10 py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group"
+              >
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-black text-slate-900 truncate group-hover:text-slate-600 transition-colors">
+                    {row.full_name || (
+                      <span className="font-light text-slate-400">{row.query_target}</span>
+                    )}
+                  </span>
+                  <span
+                    className="text-[10px] font-light text-slate-400 tracking-widest"
+                    style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+                  >
+                    {row.query_target}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 shrink-0 ml-4">
+                  <span
+                    className="text-[9px] font-black tracking-[0.2em] px-3 py-1"
+                    style={{ color: cfg.color, backgroundColor: cfg.bg, border: `1px solid ${cfg.border}` }}
+                  >
+                    {cfg.label}
+                  </span>
+                  <span
+                    className="text-[10px] font-light text-slate-300 tracking-widest hidden sm:block"
+                    style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+                  >
+                    {date}
+                  </span>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
