@@ -82,13 +82,17 @@ interface ResultsProps extends ProfileData {
   declaredIncome: number;
 }
 
-async function getProfileContext(profile: Profile): Promise<ProfileData> {
+async function getProfileContext(
+  profile: Profile,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+): Promise<ProfileData> {
   const [{ data: reviews }, { data: links }] = await Promise.all([
-    (supabase as any)
+    client
       .from("reviews")
       .select("*, company:companies(*)")
       .eq("profile_id", profile.id),
-    (supabase as any)
+    client
       .from("guarantor_links")
       .select("*, guarantor:profiles!linked_profile_id(*)")
       .eq("primary_profile_id", profile.id),
@@ -168,7 +172,7 @@ export default async function BusinessDashboard(props: {
       // Rule A — isNew === false means cache hit, credit is NOT consumed (falls through)
 
       if (!quotaExhausted) {
-        result = await getProfileContext(fetchOutcome.profile);
+        result = await getProfileContext(fetchOutcome.profile, authClient);
 
         // Estado B: person was found in BCRA but currently carries no active debt.
         // Only flag this when hasHistoricalActivity is true; if it's false the
@@ -281,74 +285,78 @@ export default async function BusinessDashboard(props: {
           id="search-form"
           method="get"
           action="/business"
-          className="bg-white border border-slate-200 rounded-2xl px-8 py-7 flex flex-col md:flex-row gap-5 md:items-end"
+          className="bg-white border border-slate-200 rounded-2xl px-8 py-7 flex flex-col gap-5"
         >
-          <div className="flex-1 flex flex-col gap-2">
-            <label
-              htmlFor="cuit-input"
-              className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
-            >
-              IDENTIFICACIÓN FISCAL
-            </label>
-            <input
-              id="cuit-input"
-              type="text"
-              name="cuit"
-              defaultValue={searchParams.cuit ?? ""}
-              placeholder="DNI o CUIL sin guiones"
-              className="
-                w-full text-3xl font-light text-slate-800 bg-transparent
-                border-0 border-b-2 border-slate-200
-                py-3 px-0
-                placeholder:text-slate-300
-                focus:outline-none focus:border-slate-700
-                transition-colors
-              "
-            />
-            <p className="text-xs font-light text-slate-400 tracking-wide">
-              Podés ingresar DNI o CUIL completo sin guiones. Con 11 dígitos se busca directamente.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="cuit-input"
+                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
+              >
+                IDENTIFICACIÓN FISCAL
+              </label>
+              <input
+                id="cuit-input"
+                type="text"
+                name="cuit"
+                defaultValue={searchParams.cuit ?? ""}
+                placeholder="DNI o CUIL sin guiones"
+                className="
+                  w-full text-2xl font-light text-slate-800 bg-transparent
+                  border-0 border-b-2 border-slate-200
+                  py-3 px-0
+                  placeholder:text-slate-300
+                  focus:outline-none focus:border-slate-700
+                  transition-colors
+                "
+              />
+              <p className="text-xs font-light text-slate-400 tracking-wide">
+                Podés ingresar DNI o CUIL completo sin guiones. Con 11 dígitos se busca directamente.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="income-input"
+                className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
+              >
+                INGRESO MENSUAL <span className="font-light normal-case tracking-normal">(opcional)</span>
+              </label>
+              <input
+                id="income-input"
+                type="number"
+                name="income"
+                min="0"
+                defaultValue={searchParams.income ?? ""}
+                placeholder="ARS"
+                className="
+                  w-full text-2xl font-light text-slate-800 bg-transparent
+                  border-0 border-b-2 border-slate-200
+                  py-3 px-0
+                  placeholder:text-slate-300
+                  focus:outline-none focus:border-slate-700
+                  transition-colors
+                "
+              />
+              <p className="text-xs font-light text-slate-400 tracking-wide">
+                Para calcular ratio deuda / ingreso.
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-2 md:w-52 shrink-0">
-            <label
-              htmlFor="income-input"
-              className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase"
-            >
-              INGRESO MENSUAL <span className="font-light normal-case tracking-normal">(opcional)</span>
-            </label>
-            <input
-              id="income-input"
-              type="number"
-              name="income"
-              min="0"
-              defaultValue={searchParams.income ?? ""}
-              placeholder="ARS"
+          <div className="flex justify-end">
+            <button
+              type="submit"
               className="
-                w-full text-xl font-light text-slate-800 bg-transparent
-                border-0 border-b-2 border-slate-200
-                py-3 px-0
-                placeholder:text-slate-300
-                focus:outline-none focus:border-slate-700
-                transition-colors
+                px-10 py-4 rounded-xl
+                text-[11px] font-black tracking-[0.25em] text-white
+                hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer
               "
-            />
-            <p className="text-xs font-light text-slate-400 tracking-wide">
-              Para calcular ratio deuda / ingreso.
-            </p>
+              style={{ backgroundColor: "var(--color-secondary)" }}
+            >
+              CONSULTAR
+            </button>
           </div>
-
-          <button
-            type="submit"
-            className="
-              px-10 py-4 rounded-xl shrink-0
-              text-[11px] font-black tracking-[0.25em] text-white
-              hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer
-            "
-            style={{ backgroundColor: "var(--color-secondary)" }}
-          >
-            CONSULTAR
-          </button>
         </form>
 
         {/* ── ESTADOS ── */}
