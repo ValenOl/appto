@@ -840,45 +840,8 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes 
         </div>
       )}
 
-      {/* ── RED DE GARANTÍAS ── */}
-      {links.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="px-10 py-7 border-b border-slate-100">
-            <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
-              POTENCIALES GARANTES DETECTADOS
-            </h2>
-            <p className="text-xs font-light text-slate-400 mt-1">
-              Vínculos detectados por la red ΛPPTO — no son co-deudores confirmados
-            </p>
-          </div>
-
-          {links.map((link) => (
-            <div
-              key={link.id}
-              className="px-10 py-7 border-b border-slate-100 last:border-0 flex flex-col md:flex-row md:items-center md:justify-between gap-5"
-            >
-              <div className="flex flex-col gap-1">
-                <span className="text-base font-black text-slate-900">
-                  {link.guarantor.full_name}
-                </span>
-                <span
-                  className="text-xs tracking-widest text-slate-400"
-                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                >
-                  CUIT: {link.guarantor.cuit}
-                </span>
-                <span className="text-xs font-light text-slate-500 mt-1">
-                  {link.relation_type}
-                </span>
-              </div>
-
-              <button className="self-start md:self-center text-[10px] font-black tracking-[0.15em] text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-4 py-2.5 transition-colors whitespace-nowrap cursor-pointer">
-                [ EVALUAR GARANTE ]
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ── RED DE VÍNCULOS ── */}
+      <GroupEvaluationSection mainProfile={profile} links={links} />
 
       {/* ── NOTAS INTERNAS ── */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
@@ -1302,6 +1265,131 @@ function ReviewsSection({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Group evaluation — consolidated risk across linked profiles
+// ─────────────────────────────────────────────
+
+function GroupEvaluationSection({
+  mainProfile,
+  links,
+}: {
+  mainProfile: Profile;
+  links: GuarantorLinkWithProfile[];
+}) {
+  if (links.length === 0) return null;
+
+  const allProfiles = [mainProfile, ...links.map((l) => l.guarantor)];
+  const groupWorstBcra = Math.max(...allProfiles.map((p) => p.bcra_score));
+  const groupMinAppto  = Math.min(...allProfiles.map((p) => p.appto_score ?? 0));
+
+  const groupStatus =
+    groupWorstBcra >= 4 ? 'alto'   :
+    groupWorstBcra >= 2 ? 'medio'  :
+    'limpio';
+
+  const groupLabel =
+    groupStatus === 'alto'   ? 'RIESGO GRUPAL ELEVADO'            :
+    groupStatus === 'medio'  ? 'ATENCIÓN — ANTECEDENTES EN LA RED' :
+    'GRUPO SIN ANTECEDENTES NEGATIVOS';
+
+  const groupColor =
+    groupStatus === 'alto'   ? '#dc2626' :
+    groupStatus === 'medio'  ? '#d97706' :
+    '#16a34a';
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+
+      {/* Header + group verdict */}
+      <div className="px-10 py-7 border-b border-slate-100 flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[11px] font-black tracking-[0.3em] text-slate-900 uppercase">
+            Red de Vínculos — Evaluación Grupal
+          </h2>
+          <p className="text-xs font-light text-slate-400 mt-1">
+            Análisis consolidado de todos los perfiles vinculados al expediente.
+          </p>
+        </div>
+        <div
+          className="flex flex-col gap-1 shrink-0 pl-5 border-l-4"
+          style={{ borderColor: groupColor }}
+        >
+          <span
+            className="text-[10px] font-black tracking-[0.2em] uppercase"
+            style={{ color: groupColor }}
+          >
+            {groupLabel}
+          </span>
+          <span className="text-[9px] font-light text-slate-400 leading-relaxed">
+            {allProfiles.length} perfiles · BCRA máx. Sit. {groupWorstBcra} · Score mín. {groupMinAppto} / 1000
+          </span>
+        </div>
+      </div>
+
+      {/* Linked profile mini-cards */}
+      {links.map((link) => {
+        const g         = link.guarantor;
+        const isRisk    = g.bcra_score > 1;
+        const totalDebt = (g.debt_detail ?? []).reduce((s, d) => s + d.monto, 0);
+
+        return (
+          <div
+            key={link.id}
+            className="px-10 py-7 border-b border-slate-100 last:border-0 flex flex-col gap-4"
+          >
+            {/* Identity row */}
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-base font-black text-slate-900">{g.full_name}</span>
+                <span
+                  className="text-xs tracking-widest text-slate-400"
+                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                >
+                  CUIT: {g.cuit}
+                </span>
+              </div>
+              <span className="self-start text-[10px] font-black tracking-[0.15em] text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 whitespace-nowrap">
+                {link.relation_type}
+              </span>
+            </div>
+
+            {/* Metrics chips */}
+            <div className="flex flex-wrap gap-2">
+              <span className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600">
+                ΛPPTO {g.appto_score ?? "—"} / 1000
+              </span>
+              <span
+                className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                style={
+                  isRisk
+                    ? { backgroundColor: "rgba(220,38,38,0.06)", color: "#dc2626", border: "1px solid rgba(220,38,38,0.2)" }
+                    : { backgroundColor: "rgba(22,163,74,0.06)",  color: "#16a34a", border: "1px solid rgba(22,163,74,0.2)"  }
+                }
+              >
+                BCRA SIT. {g.bcra_score}
+              </span>
+              {g.trend && <TrendBadge trend={g.trend as TrendDirection | null} />}
+              {totalDebt > 0 && (
+                <span className="text-[10px] font-black tracking-[0.15em] px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600">
+                  DEUDA $ {formatIncome(totalDebt * 1000)}
+                </span>
+              )}
+            </div>
+
+            {/* Link to full profile */}
+            <a
+              href={`/business?cuit=${g.cuit}`}
+              className="self-start text-[10px] font-black tracking-[0.15em] text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-4 py-2.5 transition-colors whitespace-nowrap"
+            >
+              [ VER PERFIL COMPLETO ]
+            </a>
+          </div>
+        );
+      })}
     </div>
   );
 }
