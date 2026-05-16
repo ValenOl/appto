@@ -4,6 +4,7 @@ import type {
   BcraChequesResults,
 } from "@/lib/services/bcraService";
 import type { DebtEntry, SituacionPoint } from "@/types/database";
+import { getUvaRate } from "@/lib/utils/uvaRate";
 
 // ── Penalty constants ─────────────────────────────────────────────────────
 
@@ -11,12 +12,17 @@ const PENALTY_SITUATION      = 200;  // per BCRA situation point above 1
 const PENALTY_CHECKS         = 100;  // recent rejected check (last 6 months)
 const PENALTY_INSTABILITY    = 50;   // situation jump > 1 between periods
 const PENALTY_MULTIBANK      = 100;  // > 4 reporting entities in latest period
-const PENALTY_DEBT_HIGH      = 75;   // total debt > 5,000 units (= 5,000,000 ARS)
-const PENALTY_DEBT_VERY_HIGH = 150;  // total debt > 20,000 units (= 20,000,000 ARS)
+const PENALTY_DEBT_HIGH      = 75;   // total debt above high threshold
+const PENALTY_DEBT_VERY_HIGH = 150;  // total debt above very-high threshold (replaces, not stacked)
 
-const THRESHOLD_MULTIBANK       = 4;
-const THRESHOLD_DEBT_HIGH       = 5_000;   // miles ARS
-const THRESHOLD_DEBT_VERY_HIGH  = 20_000;  // miles ARS
+const THRESHOLD_MULTIBANK = 4;
+
+// Debt thresholds in UVA units — inflation-resistant.
+// Equivalent to ~5M and ~20M ARS at the mid-2026 UVA baseline of 1,850.
+// At runtime these are multiplied by getUvaRate() to get the current ARS equivalent.
+// Update UVA_RATE in env vars to recalibrate without a code deploy.
+const THRESHOLD_DEBT_HIGH_UVA      = 2_700   // ~5,000,000 ARS at baseline
+const THRESHOLD_DEBT_VERY_HIGH_UVA = 10_800  // ~20,000,000 ARS at baseline
 
 // ── Score calculator ──────────────────────────────────────────────────────
 //
@@ -26,8 +32,8 @@ const THRESHOLD_DEBT_VERY_HIGH  = 20_000;  // miles ARS
 //   -100   recent rejected check
 //   -50    historical instability (jump > 1 between periods)
 //   -100   multibancarización (> 4 entities in latest period)
-//   -75    total debt > 5 M ARS
-//   -150   total debt > 20 M ARS (replaces -75, not stacked)
+//   -75    total debt above high UVA threshold (~5M ARS at baseline)
+//   -150   total debt above very-high UVA threshold (~20M ARS at baseline)
 
 export function calculateApptoScore(
   deuda:    BcraDeudaResults | null,
@@ -51,11 +57,14 @@ export function calculateApptoScore(
       score -= PENALTY_MULTIBANK;
     }
 
-    // Absolute debt load
-    const totalMonto = periodWithData.entidades.reduce((sum, e) => sum + e.monto, 0);
-    if (totalMonto > THRESHOLD_DEBT_VERY_HIGH) {
+    // Absolute debt load — thresholds in miles ARS, derived from UVA to stay inflation-resistant
+    const uvaRate        = getUvaRate()
+    const threshHigh     = THRESHOLD_DEBT_HIGH_UVA      * uvaRate / 1_000
+    const threshVeryHigh = THRESHOLD_DEBT_VERY_HIGH_UVA * uvaRate / 1_000
+    const totalMonto     = periodWithData.entidades.reduce((sum, e) => sum + e.monto, 0);
+    if (totalMonto > threshVeryHigh) {
       score -= PENALTY_DEBT_VERY_HIGH;
-    } else if (totalMonto > THRESHOLD_DEBT_HIGH) {
+    } else if (totalMonto > threshHigh) {
       score -= PENALTY_DEBT_HIGH;
     }
   }
@@ -90,11 +99,15 @@ export function generateAnalystVerdict(
   apptoScore: number,
   debtDetail: DebtEntry[],
 ): string {
+  const uvaRate        = getUvaRate()
+  const threshHigh     = THRESHOLD_DEBT_HIGH_UVA      * uvaRate / 1_000
+  const threshVeryHigh = THRESHOLD_DEBT_VERY_HIGH_UVA * uvaRate / 1_000
+
   const entityCount    = debtDetail.length;
   const totalMonto     = debtDetail.reduce((sum, e) => sum + e.monto, 0);
   const isMultibank    = entityCount > THRESHOLD_MULTIBANK;
-  const isHighDebt     = totalMonto  > THRESHOLD_DEBT_HIGH;
-  const isVeryHighDebt = totalMonto  > THRESHOLD_DEBT_VERY_HIGH;
+  const isHighDebt     = totalMonto  > threshHigh;
+  const isVeryHighDebt = totalMonto  > threshVeryHigh;
 
   // Irregular situations — ordered from worst to least severe
   if (bcraScore >= 6) {
