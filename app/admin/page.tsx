@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { approveCompany } from '@/app/actions/admin'
 import type { Company } from '@/types/database'
 
-const ADMIN_EMAIL = 'joaquinolivero97@gmail.com'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'joaquinolivero97@gmail.com'
 
 // ─────────────────────────────────────────────
 // Page (Server Component)
@@ -15,12 +16,19 @@ export default async function AdminPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.email !== ADMIN_EMAIL) redirect('/')
 
-  const { data: companies } = await supabase
-    .from('companies')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const admin = getSupabaseAdmin()
+
+  const [{ data: companies }, { data: usersData }] = await Promise.all([
+    supabase.from('companies').select('*').order('created_at', { ascending: false }),
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  ])
 
   const rows = (companies ?? []) as Company[]
+
+  // Build a quick lookup map: user_id → email
+  const emailMap = new Map<string, string>(
+    (usersData?.users ?? []).map((u) => [u.id, u.email ?? ''])
+  )
 
   const pending = rows.filter((c) => c.subscription_status === 'pending').length
   const active  = rows.filter((c) => c.subscription_status === 'active').length
@@ -113,7 +121,11 @@ export default async function AdminPage() {
             </div>
           ) : (
             rows.map((company) => (
-              <CompanyRow key={company.id} company={company} />
+              <CompanyRow
+                key={company.id}
+                company={company}
+                email={emailMap.get(company.user_id ?? '') ?? ''}
+              />
             ))
           )}
 
@@ -128,7 +140,7 @@ export default async function AdminPage() {
 // Company row
 // ─────────────────────────────────────────────
 
-function CompanyRow({ company }: { company: Company }) {
+function CompanyRow({ company, email }: { company: Company; email: string }) {
   const isPending = company.subscription_status === 'pending'
 
   const registeredAt = new Date(company.created_at).toLocaleDateString('es-AR', {
@@ -151,6 +163,15 @@ function CompanyRow({ company }: { company: Company }) {
         >
           CUIT: {company.cuit} · PLAN: {company.plan_tier} · {registeredAt}
         </span>
+        {email && (
+          <a
+            href={`mailto:${email}`}
+            className="text-xs tracking-[0.1em] text-slate-500 hover:text-slate-900 transition-colors underline underline-offset-2"
+            style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
+          >
+            {email}
+          </a>
+        )}
         <span
           className="text-xs tracking-[0.1em] text-slate-400"
           style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
