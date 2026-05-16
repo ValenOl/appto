@@ -204,6 +204,27 @@ export type Database = {
         }
       }
 
+      leads: {
+        Row: {
+          id:         string
+          email:      string
+          cuit:       string | null
+          created_at: string
+        }
+        Insert: {
+          id?:         string
+          email:       string
+          cuit?:       string | null
+          created_at?: string
+        }
+        Update: {
+          id?:         string
+          email?:      string
+          cuit?:       string | null
+          created_at?: string
+        }
+      }
+
       guarantor_links: {
         Row: {
           id:                 string

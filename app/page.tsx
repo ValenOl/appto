@@ -1,14 +1,10 @@
-"use client";
+import { saveLead } from '@/app/actions/leads'
 
-import { useState } from "react";
-
-export default function Home() {
-  const [submitted, setSubmitted] = useState(false);
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitted(true);
-  }
+export default async function Home(props: {
+  searchParams: Promise<{ s?: string }>
+}) {
+  const { s } = await props.searchParams
+  const submitted = s === 'lead'
 
   return (
     <div
@@ -73,11 +69,19 @@ export default function Home() {
           </div>
 
           {submitted ? (
-            <p className="text-sm font-light text-slate-600 leading-relaxed border-l-2 border-slate-900 pl-4">
-              Solicitud recibida. Nos contactaremos en breve.
-            </p>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm font-light text-slate-600 leading-relaxed border-l-2 border-slate-900 pl-4">
+                Solicitud recibida. Nos contactaremos en breve para enviarte los medios de pago.
+              </p>
+              <a
+                href="/pricing"
+                className="text-[11px] font-black tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors"
+              >
+                VER PLANES →
+              </a>
+            </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            <form action={saveLead} className="flex flex-col gap-6">
               <div className="flex flex-col gap-7">
                 <input
                   type="email"
@@ -96,10 +100,9 @@ export default function Home() {
                 <input
                   type="text"
                   name="cuit"
-                  required
                   placeholder="CUIT de la empresa"
                   inputMode="numeric"
-                  maxLength={11}
+                  maxLength={13}
                   className="
                     w-full bg-transparent
                     border-0 border-b border-slate-300
@@ -124,7 +127,11 @@ export default function Home() {
               </button>
 
               <p className="text-[10px] font-light text-slate-300 text-center tracking-wider">
-                Al enviar, aceptás los Términos de Uso corporativos de ΛPPTO.
+                Al enviar, aceptás los{' '}
+                <a href="/terminos" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-500 transition-colors">
+                  Términos de Uso
+                </a>{' '}
+                corporativos de ΛPPTO.
               </p>
             </form>
           )}
@@ -147,12 +154,8 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
 
             <div className="flex flex-col gap-5 pr-0 pb-10 md:pb-0 md:pr-12">
-              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
-                01
-              </span>
-              <h3 className="text-base font-black text-slate-900 leading-snug">
-                Motor BCRA en tiempo real.
-              </h3>
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">01</span>
+              <h3 className="text-base font-black text-slate-900 leading-snug">Motor BCRA en tiempo real.</h3>
               <p className="text-sm font-light text-slate-500 leading-relaxed">
                 Datos oficiales sin fricción. Accedé a situación crediticia,
                 historial de deuda y cheques rechazados directamente desde la
@@ -161,12 +164,8 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-5 px-0 py-10 md:py-0 md:px-12">
-              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
-                02
-              </span>
-              <h3 className="text-base font-black text-slate-900 leading-snug">
-                Score ΛPPTO.
-              </h3>
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">02</span>
+              <h3 className="text-base font-black text-slate-900 leading-snug">Score ΛPPTO.</h3>
               <p className="text-sm font-light text-slate-500 leading-relaxed">
                 Dictámenes claros para tus equipos y asesores. Un índice
                 unificado de 0 a 1000 que consolida BCRA, historial y
@@ -175,12 +174,8 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-5 pt-10 md:pt-0 md:pl-12">
-              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">
-                03
-              </span>
-              <h3 className="text-base font-black text-slate-900 leading-snug">
-                Gestión de Riesgo.
-              </h3>
+              <span className="text-[10px] font-black tracking-[0.35em] text-slate-400 uppercase">03</span>
+              <h3 className="text-base font-black text-slate-900 leading-snug">Gestión de Riesgo.</h3>
               <p className="text-sm font-light text-slate-500 leading-relaxed">
                 Historial completo de consultas centralizado. Trazabilidad
                 total de cada auditoría realizada por tu empresa, con
@@ -196,6 +191,14 @@ export default function Home() {
       <footer className="border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-3">
           <span className="text-sm font-black text-slate-900">ΛPPTO</span>
+          <div className="flex items-center gap-6">
+            <a href="/terminos" className="text-[11px] font-light text-slate-400 hover:text-slate-700 transition-colors tracking-wider">
+              Términos
+            </a>
+            <a href="/pricing" className="text-[11px] font-light text-slate-400 hover:text-slate-700 transition-colors tracking-wider">
+              Planes
+            </a>
+          </div>
           <p className="text-[11px] font-light text-slate-400 tracking-wider">
             SISTEMA DE EVALUACIÓN DE RIESGO CREDITICIO — © 2026
           </p>
@@ -203,5 +206,5 @@ export default function Home() {
       </footer>
 
     </div>
-  );
+  )
 }

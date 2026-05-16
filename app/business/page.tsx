@@ -143,12 +143,28 @@ export default async function BusinessDashboard(props: {
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
-  const company = companyData as Company | null;
+  let company = companyData as Company | null;
 
   if (!company) redirect("/login");
 
   if (company.subscription_status === "pending") {
     return <PendingGate company={company} />;
+  }
+
+  // Auto-reset if the billing cycle expired (safety net for missed cron runs).
+  // The extra .lt() condition prevents double-reset under concurrent requests.
+  const today = new Date().toISOString().split('T')[0];
+  if (company.cycle_reset_date < today) {
+    const newResetDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      .toISOString().split('T')[0];
+    const { data: resetData } = await (getSupabaseAdmin() as any)
+      .from('companies')
+      .update({ queries_used: 0, cycle_reset_date: newResetDate })
+      .eq('id', company.id)
+      .lt('cycle_reset_date', today)
+      .select()
+      .maybeSingle();
+    if (resetData) company = resetData as Company;
   }
   // ─────────────────────────────────────────────
 
@@ -712,7 +728,7 @@ function QuotaExhausted({ planTier }: { planTier: string }) {
       </p>
       <div className="pt-2">
         <a
-          href="#"
+          href="mailto:hola@appto.ar?subject=Solicitud%20de%20actualización%20de%20plan"
           className="
             inline-block px-10 py-4 rounded-xl
             text-[11px] font-black tracking-[0.25em] text-white

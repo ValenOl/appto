@@ -86,8 +86,10 @@ export default async function RegisterPage(props: {
           <input
             type="text"
             name="cuit"
-            placeholder="CUIT"
+            placeholder="CUIT (11 dígitos)"
             required
+            inputMode="numeric"
+            maxLength={13}
             className="
               w-full text-2xl font-light text-slate-800 bg-transparent
               border-0 border-b-2 border-slate-200
@@ -145,7 +147,7 @@ export default async function RegisterPage(props: {
 
         <p className="text-xs font-light text-slate-400 leading-relaxed text-center">
           Al enviar este formulario aceptás los{' '}
-          <a href="#" className="underline underline-offset-2 hover:text-slate-700 transition-colors">
+          <a href="/terminos" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-700 transition-colors">
             Términos y Condiciones
           </a>{' '}
           de ΛPPTO.

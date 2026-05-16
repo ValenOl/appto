@@ -160,12 +160,6 @@ export default async function PersonalDashboard() {
           </span>
 
           <nav className="flex items-center gap-6 md:gap-8 overflow-x-auto">
-            <a
-              href="#"
-              className="text-[11px] font-black tracking-[0.2em] text-slate-500 hover:text-slate-900 transition-colors whitespace-nowrap"
-            >
-              [ EDUCACIÓN FINANCIERA ]
-            </a>
             <form action={signOut}>
               <button
                 type="submit"

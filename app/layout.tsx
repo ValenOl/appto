@@ -12,9 +12,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://appto.ar'
+
 export const metadata: Metadata = {
-  title: "ΛPPTO — Consulta de Riesgo Crediticio Institucional",
-  description: "Consultá el riesgo crediticio al instante. BCRA, AFIP y Nosis integrados.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default:  'ΛPPTO — Motor de Riesgo Crediticio B2B',
+    template: '%s — ΛPPTO',
+  },
+  description:
+    'Consultá el historial crediticio de tus clientes en segundos. Score BCRA, dictamen formal y red de garantías para inmobiliarias, financieras y equipos comerciales.',
+  openGraph: {
+    type:        'website',
+    locale:      'es_AR',
+    url:         SITE_URL,
+    siteName:    'ΛPPTO',
+    title:       'ΛPPTO — Motor de Riesgo Crediticio B2B',
+    description: 'Score BCRA · Dictamen formal · Red de garantías. Evaluá el riesgo crediticio de tus clientes en 3 segundos.',
+  },
+  twitter: {
+    card:        'summary_large_image',
+    title:       'ΛPPTO — Motor de Riesgo Crediticio B2B',
+    description: 'Score BCRA · Dictamen formal · Red de garantías.',
+  },
+  robots: {
+    index:  true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +48,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

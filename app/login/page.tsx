@@ -1,9 +1,9 @@
 import { signIn } from '@/app/actions/auth'
 
 export default async function LoginPage(props: {
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; s?: string }>
 }) {
-  const { error } = await props.searchParams
+  const { error, s } = await props.searchParams
 
   return (
     <div
@@ -25,7 +25,14 @@ export default async function LoginPage(props: {
           </p>
         </div>
 
-        {/* ── ERROR ── */}
+        {/* ── FEEDBACK ── */}
+        {s === 'password-updated' && (
+          <div className="border border-green-200 bg-green-50 px-5 py-4" style={{ borderLeft: '3px solid #16a34a' }}>
+            <p className="text-sm font-light text-green-800">
+              Contraseña actualizada. Podés iniciar sesión con la nueva contraseña.
+            </p>
+          </div>
+        )}
         {error && (
           <div className="bg-red-50 px-5 py-4">
             <p className="text-xs font-light text-red-900 leading-relaxed">
@@ -78,6 +85,13 @@ export default async function LoginPage(props: {
           >
             [ INICIAR SESIÓN ]
           </button>
+
+          <a
+            href="/forgot-password"
+            className="text-center text-[10px] font-light text-slate-400 hover:text-slate-700 transition-colors tracking-widest"
+          >
+            ¿Olvidaste tu contraseña?
+          </a>
 
         </form>
 

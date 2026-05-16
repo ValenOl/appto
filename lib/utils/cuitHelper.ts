@@ -33,3 +33,24 @@ export function getPossibleCuils(dni: string): string[] {
     .map((prefix) => buildCuil(prefix, dni))
     .filter((cuil): cuil is string => cuil !== null);
 }
+
+/**
+ * Validates a CUIT/CUIL string using Argentina's Módulo 11 algorithm.
+ * Accepts with or without hyphens (e.g. "20-12345678-9" or "20123456789").
+ * Returns true only if the string is exactly 11 digits and the check digit is correct.
+ */
+export function validateCuit(raw: string): boolean {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length !== 11) return false;
+
+  const body     = digits.slice(0, 10);
+  const provided = Number(digits[10]);
+
+  const sum = body.split('').reduce((acc, d, i) => acc + Number(d) * WEIGHTS[i], 0);
+  const rem = sum % 11;
+
+  if (rem === 1) return false; // structurally invalid — no valid check digit exists
+  const expected = rem === 0 ? 0 : 11 - rem;
+
+  return provided === expected;
+}
