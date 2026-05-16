@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { saveNote } from "@/app/actions/business";
-import { saveReview } from "@/app/actions/reviews";
+import { ReviewForm } from "@/app/business/ReviewForm";
 import { generateAnalystVerdict } from "@/lib/utils/scoring";
 import type { TrendDirection } from "@/lib/utils/scoring";
 import { fetchAfipData, afipIngresoMensualMax } from "@/lib/services/afipService";
@@ -1399,52 +1399,9 @@ function ReviewsSection({
 
       {/* Add review form */}
       {!hasAlreadyReviewed ? (
-        <div className="px-10 py-7">
-          <p className="text-[10px] font-black tracking-[0.3em] text-slate-400 uppercase mb-5">
-            DEJAR EVALUACIÓN
-          </p>
-          <form action={saveReview} className="flex flex-col gap-5">
-            <input type="hidden" name="profile_id" value={profileId} />
-            <input type="hidden" name="company_id" value={companyId} />
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
-                Calificación
-              </label>
-              <select
-                name="rating"
-                required
-                className="w-48 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-light text-slate-700 bg-white focus:outline-none focus:border-slate-500 transition-colors cursor-pointer"
-              >
-                <option value="">Seleccioná...</option>
-                <option value="5">5 ★ — Excelente</option>
-                <option value="4">4 ★ — Bueno</option>
-                <option value="3">3 ★ — Regular</option>
-                <option value="2">2 ★ — Malo</option>
-                <option value="1">1 ★ — Muy malo</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
-                Comentario <span className="font-light normal-case tracking-normal">(opcional)</span>
-              </label>
-              <textarea
-                name="comment"
-                rows={3}
-                placeholder="Describí tu experiencia con este perfil..."
-                className="w-full bg-transparent border border-slate-200 px-4 py-3 text-sm font-light text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-slate-500 resize-none transition-colors"
-              />
-            </div>
-            <button
-              type="submit"
-              className="self-start px-8 py-3 text-[11px] font-black tracking-[0.2em] text-white hover:opacity-90 active:opacity-80 transition-opacity cursor-pointer"
-              style={{ backgroundColor: "var(--color-secondary)" }}
-            >
-              PUBLICAR EVALUACIÓN
-            </button>
-          </form>
-        </div>
+        <ReviewForm profileId={profileId} companyId={companyId} />
       ) : (
-        <div className="px-10 py-6">
+        <div className="px-10 py-6 border-t border-slate-100">
           <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
             Tu empresa ya evaluó este perfil — tu aporte está en la red.
           </p>
