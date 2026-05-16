@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
-import { supabase } from '@/lib/supabase'
 
 export async function saveReview(formData: FormData) {
   const profileId = formData.get('profile_id') as string
@@ -18,38 +17,35 @@ export async function saveReview(formData: FormData) {
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return
 
-  // Upsert: one review per company per profile (update if already reviewed)
-  await (authClient as any).from('reviews').upsert(
-    {
-      company_id: companyId,
-      profile_id: profileId,
-      rating,
-      comment: comment?.trim() || null,
-    },
-    { onConflict: 'company_id,profile_id' }
-  )
+  const { error } = await (authClient as any).from('reviews').insert({
+    company_id: companyId,
+    profile_id: profileId,
+    rating,
+    comment: comment?.trim() || null,
+  })
 
-  revalidatePath('/business')
-}
-
-export async function submitReply(formData: FormData) {
-  const reviewId = formData.get('review_id')
-  const replyText = formData.get('reply')
-
-  if (
-    typeof reviewId !== 'string' ||
-    typeof replyText !== 'string' ||
-    !reviewId.trim() ||
-    !replyText.trim()
-  ) {
+  if (error) {
+    console.error('[reviews] insert failed:', error)
     return
   }
 
-  const { error } = await (supabase.from('reviews') as any)
+  revalidatePath('/business', 'page')
+}
+
+export async function submitReply(formData: FormData) {
+  const reviewId  = formData.get('review_id')
+  const replyText = formData.get('reply')
+
+  if (
+    typeof reviewId  !== 'string' || !reviewId.trim() ||
+    typeof replyText !== 'string' || !replyText.trim()
+  ) return
+
+  const authClient = await createClient()
+  const { error } = await (authClient as any)
+    .from('reviews')
     .update({ reply_text: replyText.trim() })
     .eq('id', reviewId.trim())
 
-  if (!error) {
-    revalidatePath('/personal')
-  }
+  if (!error) revalidatePath('/personal')
 }
