@@ -854,7 +854,11 @@ function Results({ profile, reviews, links, companyId, priorNote, internalNotes,
               {(profile.debt_detail as DebtEntry[]).map((entry, i) => (
                 <tr key={i} className="border-b border-slate-100 last:border-0">
                   <td className="px-10 py-4 text-sm font-light text-slate-700">
-                    {entry.descripcion || <span className="text-slate-300">—</span>}
+                    {entry.descripcion || (
+                      entry.entidad
+                        ? <span className="text-slate-400">Entidad {entry.entidad}</span>
+                        : <span className="text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span

@@ -1,4 +1,5 @@
 export interface DebtEntry {
+  entidad?:    number  // BCRA numeric entity ID, fallback when descripcion is empty
   descripcion: string
   situacion:   number
   monto:       number

@@ -203,6 +203,7 @@ async function buildAndPersistProfile(
   const apptoScore = calculateApptoScore(deuda, historial, cheques);
 
   const debtDetail: DebtEntry[] = (periodWithData?.entidades ?? []).map((e) => ({
+    entidad:     e.entidad,
     descripcion: e.descripcion,
     situacion:   e.situacion,
     monto:       e.monto,
