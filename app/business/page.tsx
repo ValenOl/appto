@@ -1,8 +1,9 @@
 export const preferredRegion = 'iad1'; // Washington DC — failover after gru1 block
 
 import { redirect } from "next/navigation";
-import { supabase, getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getOrFetchProfile } from "@/lib/services/dataFetcher";
 import { signOut } from "@/app/actions/auth";
 import { SearchForm } from "@/app/business/SearchForm";
@@ -58,8 +59,15 @@ async function linkProfiles(primaryId: string, linkedId: string): Promise<void> 
   });
 }
 
-async function consumeCredit(companyId: string): Promise<Company | null> {
-  const { data, error } = await (supabase as any).rpc("consume_credit", {
+// Receives the session-scoped client so the RPC runs with the authenticated JWT.
+// The updated consume_credit DB function (SECURITY INVOKER) verifies that the
+// caller owns the company before executing the UPDATE -- this prevents any
+// external actor from draining another company's quota via the anon key.
+async function consumeCredit(
+  companyId: string,
+  client: SupabaseClient,
+): Promise<Company | null> {
+  const { data, error } = await (client as any).rpc("consume_credit", {
     p_company_id: companyId,
   });
   if (error || !data || data.length === 0) return null;
@@ -209,7 +217,7 @@ export default async function BusinessDashboard(props: {
       isNew = fetchOutcome.isNew;
       if (fetchOutcome.isNew) {
         // Rule C — first successful BCRA fetch, consume credit
-        const consumed = await consumeCredit(company.id);
+        const consumed = await consumeCredit(company.id, authClient);
         if (!consumed) {
           quotaExhausted = true;
           exhaustedPlanTier = company.plan_tier;
@@ -238,7 +246,7 @@ export default async function BusinessDashboard(props: {
               garanteNoRecords = true;
             } else {
               if (garanteOutcome.isNew) {
-                await consumeCredit(company.id); // best-effort, ignore if quota edge
+                await consumeCredit(company.id, authClient); // best-effort, ignore if quota edge
               }
               garanteProfile = garanteOutcome.profile;
               await linkProfiles(fetchOutcome.profile.id, garanteOutcome.profile.id);

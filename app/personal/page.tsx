@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 import { createClient } from "@/utils/supabase/server";
 import { submitReply } from "@/app/actions/reviews";
 import { signOut } from "@/app/actions/auth";
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   Profile,
   ReviewWithCompany,
@@ -29,8 +29,13 @@ interface ProfileData {
   links: GuarantorLinkWithProfile[];
 }
 
-async function getProfileData(userId: string): Promise<ProfileData | null> {
-  const { data: profileData, error: profileError } = await (supabase as any)
+// Receives the session-scoped client from the Server Component so that all
+// queries run with the authenticated user's JWT and RLS policies apply correctly.
+async function getProfileData(
+  userId: string,
+  client: SupabaseClient,
+): Promise<ProfileData | null> {
+  const { data: profileData, error: profileError } = await (client as any)
     .from("profiles")
     .select("*")
     .eq("user_id", userId)
@@ -40,11 +45,11 @@ async function getProfileData(userId: string): Promise<ProfileData | null> {
   if (profileError || !profile) return null;
 
   const [{ data: reviewsData }, { data: linksData }] = await Promise.all([
-    (supabase as any)
+    (client as any)
       .from("reviews")
       .select("*, company:companies(*)")
       .eq("profile_id", profile.id),
-    (supabase as any)
+    (client as any)
       .from("guarantor_links")
       .select("*, guarantor:profiles!linked_profile_id(*)")
       .eq("primary_profile_id", profile.id),
@@ -141,7 +146,9 @@ export default async function PersonalDashboard() {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) redirect("/login");
 
-  const result = await getProfileData(user.id);
+  // Pass the session-scoped client so getProfileData runs all queries
+  // with the authenticated JWT -- RLS policies enforce ownership at the DB layer.
+  const result = await getProfileData(user.id, authClient);
   if (!result) redirect("/login");
 
   return (

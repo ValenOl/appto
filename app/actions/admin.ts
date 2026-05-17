@@ -4,13 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'joaquinolivero97@gmail.com'
-
 export async function approveCompany(formData: FormData) {
+  // Fail-Closed: leer el email admin en runtime, nunca hardcodear un fallback.
+  // Si ADMIN_EMAIL no está seteada, lanzar un error explícito — no silenciar.
+  const adminEmail = process.env.ADMIN_EMAIL
+  if (!adminEmail) throw new Error('[APPTO] ADMIN_EMAIL env var is not configured')
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.email !== ADMIN_EMAIL) redirect('/')
+  if (!user || user.email !== adminEmail) redirect('/')
 
   const company_id = formData.get('company_id') as string
   if (!company_id) return

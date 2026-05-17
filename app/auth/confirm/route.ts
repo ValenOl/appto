@@ -4,8 +4,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/business'
+  const code    = searchParams.get('code')
+  const rawNext = searchParams.get('next') ?? '/business'
+  // Sanitizar next: solo paths relativos estrictamente. Rechazar URLs absolutas
+  // (con protocolo) y protocol-relative URLs (//evil.com) para prevenir open redirect.
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/business'
 
   if (code) {
     const cookieStore = await cookies()

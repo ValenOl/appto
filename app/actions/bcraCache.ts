@@ -154,8 +154,23 @@ async function fetchDeudas(cuil: string): Promise<FetchResult> {
  * - DNI: tries prefix 20 (male) then 27 (female) sequentially.
  * - All 404s → outcome 'clean' (no debt on record), cached for 30 days.
  * - Network/HTTP error → outcome 'error', not cached.
+ * - Unauthenticated callers → outcome 'error', rejected immediately.
  */
 export async function queryBcra(identifier: string): Promise<BcraQueryResult> {
+  // Auth gate — esta Server Action escribe al caché con service role key.
+  // Rechazar cualquier llamada sin sesión activa verificada.
+  const { createClient } = await import('@/utils/supabase/server');
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) {
+    return {
+      data:         null,
+      outcome:      'error',
+      fetchedAt:    null,
+      resolvedCuil: null,
+      error:        'No autorizado.',
+    };
+  }
   // ── 1. Cache lookup ────────────────────────────────────────────────────────
   const hit = await readCache(identifier);
   if (hit) {

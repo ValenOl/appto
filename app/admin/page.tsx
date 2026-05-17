@@ -4,17 +4,20 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { approveCompany } from '@/app/actions/admin'
 import type { Company } from '@/types/database'
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'joaquinolivero97@gmail.com'
-
 // ─────────────────────────────────────────────
 // Page (Server Component)
 // ─────────────────────────────────────────────
 
 export default async function AdminPage() {
+  // Fail-Closed: si ADMIN_EMAIL no está configurada en las variables de entorno,
+  // lanzar error explícito. Nunca caer en un fallback hardcodeado.
+  const adminEmail = process.env.ADMIN_EMAIL
+  if (!adminEmail) throw new Error('[APPTO] ADMIN_EMAIL env var is not configured')
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.email !== ADMIN_EMAIL) redirect('/')
+  if (!user || user.email !== adminEmail) redirect('/')
 
   const admin = getSupabaseAdmin()
 

@@ -5,6 +5,14 @@ import { createClient } from '@/utils/supabase/server'
 import { validateCuit } from '@/lib/utils/cuitHelper'
 
 export async function signUpCompany(formData: FormData) {
+  // TODO [RATE LIMIT — Sprint Infra]: Implementar @upstash/ratelimit en este punto.
+  // Límite sugerido: 10 registros por IP por hora (sliding window).
+  // import { Ratelimit } from '@upstash/ratelimit'
+  // import { Redis } from '@upstash/redis'
+  // const rl = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(10, '1h') })
+  // const { success } = await rl.limit(headers().get('x-forwarded-for') ?? 'anonymous')
+  // if (!success) redirect(`/register?plan=${plan_tier}&error=rate-limit`)
+
   const email        = formData.get('email')        as string
   const password     = formData.get('password')     as string
   const cuit         = (formData.get('cuit') as string).replace(/\D/g, '')
@@ -48,9 +56,23 @@ export async function signUpCompany(formData: FormData) {
 }
 
 export async function signUpUser(formData: FormData) {
+  // TODO [RATE LIMIT — Sprint Infra]: Implementar @upstash/ratelimit en este punto.
+  // Límite sugerido: 5 registros por IP por hora (sliding window).
+  // import { Ratelimit } from '@upstash/ratelimit'
+  // import { Redis } from '@upstash/redis'
+  // const rl = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(5, '1h') })
+  // const { success } = await rl.limit(headers().get('x-forwarded-for') ?? 'anonymous')
+  // if (!success) redirect('/register-user?error=rate-limit')
+
   const email    = formData.get('email')    as string
   const password = formData.get('password') as string
-  const cuit     = formData.get('cuit')     as string
+  const cuit     = (formData.get('cuit') as string)?.replace(/\D/g, '') || ''
+
+  // Validar CUIT antes de crear el usuario en Supabase Auth.
+  // Si lo validamos después, un CUIT inválido deja un auth user huérfano sin perfil.
+  if (!validateCuit(cuit)) {
+    redirect(`/register-user?error=${encodeURIComponent('CUIT inválido. Verificá los 11 dígitos.')}`)
+  }
 
   const supabase = await createClient()
 
@@ -68,13 +90,13 @@ export async function signUpUser(formData: FormData) {
     .single()
 
   if (existing) {
-    await (supabase.from('profiles') as any)
-      .update({ user_id: userId })
-      .eq('cuit', cuit)
-  } else {
-    await (supabase.from('profiles') as any)
-      .insert({ cuit, user_id: userId, full_name: '', bcra_score: 0, estimated_income: 0 })
+    // Nunca reasignar un perfil existente a un nuevo usuario — previene account takeover.
+    // El CUIT ya tiene cuenta; redirigir con error sin revelar si la cuenta es de otro.
+    redirect(`/register-user?error=${encodeURIComponent('Este CUIT ya tiene una cuenta registrada. Iniciá sesión o usá la opción de recuperar contraseña.')}`)
   }
+
+  await (supabase.from('profiles') as any)
+    .insert({ cuit, user_id: userId, full_name: '', bcra_score: 0, estimated_income: 0 })
 
   redirect('/personal')
 }

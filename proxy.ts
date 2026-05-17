@@ -4,7 +4,11 @@ import { updateSession } from '@/utils/supabase/middleware'
 export async function proxy(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request)
 
-  if (!user && request.nextUrl.pathname.startsWith('/business')) {
+  const isProtected =
+    request.nextUrl.pathname.startsWith('/business') ||
+    request.nextUrl.pathname.startsWith('/admin')
+
+  if (!user && isProtected) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
     loginUrl.search = ''
