@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react';
 import type { SearchHistory } from '@/types/database';
 
+type HistoryRow = Omit<SearchHistory, 'company_id'>;
+
 function formatDate(iso: string): string {
   return new Date(iso)
     .toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })
@@ -25,7 +27,7 @@ const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string
   sin_datos: { label: 'SIN DATOS', color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.25)'  },
 };
 
-function exportCSV(rows: SearchHistory[]) {
+function exportCSV(rows: HistoryRow[]) {
   const headers = ['DENOMINACIÓN', 'CUIT / DNI', 'DICTAMEN', 'SCORE ΛPPTO', 'FECHA'];
   const escape  = (v: string) => `"${v.replace(/"/g, '""')}"`;
 
@@ -49,7 +51,7 @@ function exportCSV(rows: SearchHistory[]) {
   URL.revokeObjectURL(url);
 }
 
-export function HistoryClient({ rows }: { rows: SearchHistory[] }) {
+export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {

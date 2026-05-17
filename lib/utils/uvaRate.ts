@@ -9,5 +9,9 @@ const FALLBACK_UVA_ARS = 1_850 // approximate as of mid-2026
 
 export function getUvaRate(): number {
   const env = parseFloat(process.env.UVA_RATE ?? '')
-  return isNaN(env) || env <= 0 ? FALLBACK_UVA_ARS : env
+  if (isNaN(env) || env <= 0) {
+    console.warn(`[SCORING] UVA_RATE no configurado — usando fallback ${FALLBACK_UVA_ARS} ARS. Actualizar en variables de entorno.`)
+    return FALLBACK_UVA_ARS
+  }
+  return env
 }

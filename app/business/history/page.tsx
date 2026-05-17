@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import type { Company, SearchHistory } from "@/types/database";
+import type { SearchHistory } from "@/types/database";
 import { HistoryClient } from "./HistoryClient";
+
+type HistoryRow = Omit<SearchHistory, 'company_id'>;
 
 export default async function HistoryPage() {
   const supabase = await createClient();
@@ -13,15 +15,15 @@ export default async function HistoryPage() {
 
   const { data: companyData } = await (supabase as any)
     .from("companies")
-    .select("*")
+    .select("id")
     .eq("user_id", user.id)
     .maybeSingle();
-  const company = companyData as Company | null;
+  const company = companyData as { id: string } | null;
   if (!company) redirect("/login");
 
   const { data, error } = await (supabase as any)
     .from("search_history")
-    .select("*")
+    .select("id, query_target, full_name, result_score, status, created_at")
     .eq("company_id", company.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -30,7 +32,7 @@ export default async function HistoryPage() {
     console.error("[DB] Error al leer search_history:", error);
   }
 
-  const rows = (data ?? []) as SearchHistory[];
+  const rows = (data ?? []) as HistoryRow[];
 
   return (
     <div
@@ -62,7 +64,7 @@ export default async function HistoryPage() {
           </p>
         </div>
       ) : (
-        <HistoryClient rows={rows} />
+        <HistoryClient rows={rows as HistoryRow[]} />
       )}
     </div>
   );

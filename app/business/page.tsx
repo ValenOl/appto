@@ -1257,7 +1257,6 @@ function Results({ profile, reviews, links, companyId, company, priorNote, inter
         <div className="px-5 py-5 md:px-10 md:py-7 border-b border-slate-100">
           <form action={saveNote} className="flex flex-col gap-4">
             <input type="hidden" name="profile_id" value={profile.id} />
-            <input type="hidden" name="company_id" value={companyId} />
             <textarea
               name="content"
               required
@@ -1733,7 +1732,7 @@ function ReviewsSection({
 
       {/* Add review form */}
       {!hasAlreadyReviewed ? (
-        <ReviewForm profileId={profileId} companyId={companyId} />
+        <ReviewForm profileId={profileId} />
       ) : (
         <div className="px-5 py-5 md:px-10 md:py-6 border-t border-slate-100">
           <p className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">

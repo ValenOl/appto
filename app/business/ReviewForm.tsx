@@ -6,10 +6,8 @@ import type { ReviewState } from '@/app/actions/reviews'
 
 export function ReviewForm({
   profileId,
-  companyId,
 }: {
   profileId: string
-  companyId: string
 }) {
   const [state, action, isPending] = useActionState<ReviewState, FormData>(saveReview, null)
 
@@ -30,7 +28,6 @@ export function ReviewForm({
       </p>
       <form action={action} className="flex flex-col gap-5">
         <input type="hidden" name="profile_id" value={profileId} />
-        <input type="hidden" name="company_id" value={companyId} />
 
         <div className="flex flex-col gap-2">
           <label className="text-[10px] font-black tracking-[0.25em] text-slate-400 uppercase">
