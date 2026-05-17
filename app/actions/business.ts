@@ -8,6 +8,7 @@ export async function saveNote(formData: FormData) {
   const profileId = formData.get('profile_id') as string
 
   if (!content?.trim() || !profileId) return
+  if (content.length > 2000) return
 
   const supabase = await createClient()
 

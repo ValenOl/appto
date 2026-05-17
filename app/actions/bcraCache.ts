@@ -1,6 +1,6 @@
 'use server';
 
-import { supabase, getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { buildCuil } from '@/lib/utils/cuitHelper';
 
 // ─── Public types (consumed by RiskQuery client component) ───────────────────
@@ -70,7 +70,7 @@ async function readCache(identificador: string): Promise<CacheHit | null> {
   const cutoff = new Date(Date.now() - TTL_MS).toISOString();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase as any)
+  const { data } = await (getSupabaseAdmin() as any)
     .from('consultas_bcra')
     .select('payload, fetched_at')
     .eq('identificador', identificador)
@@ -124,6 +124,7 @@ function getCuilCandidates(input: string): string[] {
 type FetchResult = BcraDeudaResults | 'not-found' | 'error';
 
 async function fetchDeudas(cuil: string): Promise<FetchResult> {
+  if (!PROXY) throw new Error('[BCRA] PROXY_URL no configurado — definir en variables de entorno');
   try {
     const endpoint = `/centraldedeudores/v1.0/Deudas/${cuil}`;
     const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
@@ -157,6 +158,19 @@ async function fetchDeudas(cuil: string): Promise<FetchResult> {
  * - Unauthenticated callers → outcome 'error', rejected immediately.
  */
 export async function queryBcra(identifier: string): Promise<BcraQueryResult> {
+  // Input validation — only digits, 7–11 chars (DNI: 7–8, CUIT: 11).
+  // RiskQuery.tsx already strips non-digits client-side, but queryBcra is a
+  // public Server Action callable directly — validate at the server boundary.
+  if (!/^\d{7,11}$/.test(identifier)) {
+    return {
+      data:         null,
+      outcome:      'error',
+      fetchedAt:    null,
+      resolvedCuil: null,
+      error:        'Identificador inválido. Ingresá un DNI (7-8 dígitos) o CUIT (11 dígitos).',
+    };
+  }
+
   // Auth gate — esta Server Action escribe al caché con service role key.
   // Rechazar cualquier llamada sin sesión activa verificada.
   const { createClient } = await import('@/utils/supabase/server');

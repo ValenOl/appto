@@ -16,8 +16,20 @@ export async function signUpCompany(formData: FormData) {
   const email        = formData.get('email')        as string
   const password     = formData.get('password')     as string
   const cuit         = (formData.get('cuit') as string).replace(/\D/g, '')
-  const company_name = formData.get('company_name') as string
-  const plan_tier    = (formData.get('plan_tier') as string) || 'BASICO'
+  const company_name = ((formData.get('company_name') as string) ?? '').trim()
+
+  // Allowlist validation: reject any plan_tier not in the known set.
+  // The form field is client-controlled — a tampered value must never grant a higher quota.
+  const VALID_PLANS = ['BASICO', 'PRO', 'ENTERPRISE'] as const
+  type PlanTier = typeof VALID_PLANS[number]
+  const rawPlan   = formData.get('plan_tier') as string
+  const plan_tier: PlanTier = (VALID_PLANS as readonly string[]).includes(rawPlan)
+    ? (rawPlan as PlanTier)
+    : 'BASICO'
+
+  if (!company_name || company_name.length > 200) {
+    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('Nombre de empresa inválido.')}`)
+  }
 
   if (!validateCuit(cuit)) {
     redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('CUIT inválido. Verificá los 11 dígitos.')}`)
