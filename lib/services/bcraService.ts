@@ -90,6 +90,13 @@ interface BcraApiResponse<T> {
 //                 on any failure. Use for secondary endpoints (historial, cheques)
 //                 where partial data is acceptable.
 
+class BcraHttpError extends Error {
+  constructor(public readonly status: number, path: string) {
+    super(`[BCRA] Proxy error ${status} en ${path}`);
+    this.name = 'BcraHttpError';
+  }
+}
+
 function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   const cause = (err as NodeJS.ErrnoException & { cause?: unknown }).cause;
@@ -99,11 +106,11 @@ function describeError(err: unknown): string {
   return `${err.name}: ${err.message}${causeStr}`;
 }
 
-async function bcraProbe<T>(path: string): Promise<T | null> {
+async function bcraProbe<T>(path: string, opts: { skipJitter?: boolean } = {}): Promise<T | null> {
   // No try/catch -- network errors propagate so callers can distinguish
   // "not found" (null) from "API down" (thrown exception).
   if (!BCRA_PROXY) throw new Error("[BCRA] PROXY_URL no configurado -- definir en variables de entorno");
-  await jitter();
+  if (!opts.skipJitter) await jitter();
   const endpoint = `${BCRA_ENDPOINT_BASE}${path}`;
   const url      = `${BCRA_PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
   console.log(`[BCRA] Proxy request -> ${endpoint}`);
@@ -119,7 +126,7 @@ async function bcraProbe<T>(path: string): Promise<T | null> {
 
   if (!res.ok) {
     if (res.status >= 500) {
-      throw new Error(`[BCRA] Proxy error ${res.status} en ${path}`);
+      throw new BcraHttpError(res.status, path);
     }
     if (res.status !== 404) {
       console.error(`[BCRA] Error ${res.status} en ${path}`);
@@ -150,16 +157,27 @@ function isEconnreset(err: unknown): boolean {
   return (cause as NodeJS.ErrnoException)?.code === 'ECONNRESET';
 }
 
-// One automatic retry on ECONNRESET (WAF geo-block drops TCP mid-connection).
-// All other errors propagate immediately.
+function isTransient(err: unknown): boolean {
+  if (isEconnreset(err)) return true;
+  return err instanceof BcraHttpError && (err.status === 502 || err.status === 503);
+}
+
+// Up to 3 attempts with exponential backoff for transient errors:
+//   ECONNRESET  -- WAF geo-block drops TCP mid-connection
+//   502 / 503   -- BCRA upstream overloaded or momentarily down
+// Jitter is skipped on retries (backoff delay already spaces requests).
+// All other errors propagate immediately to avoid caching false Estado A.
+const RETRY_DELAYS_MS = [1500, 3000] as const;
+
 async function probeDeuda(path: string): Promise<BcraDeudaResults | null> {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await bcraProbe<BcraDeudaResults>(path);
+      return await bcraProbe<BcraDeudaResults>(path, { skipJitter: attempt > 1 });
     } catch (err) {
-      if (attempt === 1 && isEconnreset(err)) {
-        console.log(`[BCRA] ECONNRESET -> esperando 1500ms y reintentando ${path} (intento 2/2)...`);
-        await new Promise((r) => setTimeout(r, 1500));
+      if (attempt < 3 && isTransient(err)) {
+        const delay = RETRY_DELAYS_MS[attempt - 1];
+        console.log(`[BCRA] Error transitorio (intento ${attempt}/3) -> esperando ${delay}ms y reintentando ${path}...`);
+        await new Promise((r) => setTimeout(r, delay));
         continue;
       }
       throw err;

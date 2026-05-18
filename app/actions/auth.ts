@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { validateCuit } from '@/lib/utils/cuitHelper'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export async function signUpCompany(formData: FormData) {
   // TODO [RATE LIMIT — Sprint Infra]: Implementar @upstash/ratelimit en este punto.
@@ -35,12 +36,16 @@ export async function signUpCompany(formData: FormData) {
     redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('CUIT inválido. Verificá los 11 dígitos.')}`)
   }
 
+  if (!email?.trim() || !password) {
+    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('Email y contraseña son requeridos.')}`)
+  }
+
   const supabase = await createClient()
 
   const { data: authData, error } = await supabase.auth.signUp({ email, password })
 
   if (error || !authData.user) {
-    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent(error?.message ?? 'Error al crear el usuario')}`)
+    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('Error al crear la cuenta. Intentá nuevamente.')}`)
   }
 
   const QUOTA: Record<string, number> = { BASICO: 30, PRO: 150, ENTERPRISE: 500 }
@@ -61,7 +66,9 @@ export async function signUpCompany(formData: FormData) {
   })
 
   if (insertError) {
-    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent(insertError.message)}`)
+    console.error('[auth] company insert failed:', insertError.message)
+    await getSupabaseAdmin().auth.admin.deleteUser(authData.user.id)
+    redirect(`/register?plan=${plan_tier}&error=${encodeURIComponent('Error al registrar la empresa. Intentá nuevamente.')}`)
   }
 
   redirect('/register/success')
@@ -86,12 +93,16 @@ export async function signUpUser(formData: FormData) {
     redirect(`/register-user?error=${encodeURIComponent('CUIT inválido. Verificá los 11 dígitos.')}`)
   }
 
+  if (!email?.trim() || !password) {
+    redirect(`/register-user?error=${encodeURIComponent('Email y contraseña son requeridos.')}`)
+  }
+
   const supabase = await createClient()
 
   const { data: authData, error } = await supabase.auth.signUp({ email, password })
 
   if (error || !authData.user) {
-    redirect(`/register-user?error=${encodeURIComponent(error?.message ?? 'Error al crear el usuario')}`)
+    redirect(`/register-user?error=${encodeURIComponent('Error al crear la cuenta. Intentá nuevamente.')}`)
   }
 
   const userId = authData.user.id
@@ -104,17 +115,28 @@ export async function signUpUser(formData: FormData) {
   if (existing) {
     // Nunca reasignar un perfil existente a un nuevo usuario — previene account takeover.
     // El CUIT ya tiene cuenta; redirigir con error sin revelar si la cuenta es de otro.
+    // Clean up the orphaned auth user created above before redirecting.
+    await getSupabaseAdmin().auth.admin.deleteUser(userId)
     redirect(`/register-user?error=${encodeURIComponent('Este CUIT ya tiene una cuenta registrada. Iniciá sesión o usá la opción de recuperar contraseña.')}`)
   }
 
-  await (supabase.from('profiles') as any)
+  const { error: profileError } = await (supabase.from('profiles') as any)
     .insert({ cuit, user_id: userId, full_name: '', bcra_score: 0, estimated_income: 0 })
+
+  if (profileError) {
+    console.error('[auth] profile insert failed:', profileError.message)
+    await getSupabaseAdmin().auth.admin.deleteUser(userId)
+    redirect(`/register-user?error=${encodeURIComponent('Error al crear la cuenta. Intentá nuevamente.')}`)
+  }
 
   redirect('/personal')
 }
 
 export async function sendPasswordReset(formData: FormData) {
   const email   = formData.get('email') as string
+  if (!email?.trim() || email.length > 320) {
+    redirect('/forgot-password?s=sent')
+  }
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
   const supabase = await createClient()
@@ -134,6 +156,8 @@ export async function resetPassword(formData: FormData) {
   if (password !== confirm)             redirect('/reset-password?e=mismatch')
 
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) redirect('/reset-password?e=auth')

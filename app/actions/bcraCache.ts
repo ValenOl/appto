@@ -70,12 +70,17 @@ async function readCache(identificador: string): Promise<CacheHit | null> {
   const cutoff = new Date(Date.now() - TTL_MS).toISOString();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (getSupabaseAdmin() as any)
+  const { data, error: cacheError } = await (getSupabaseAdmin() as any)
     .from('consultas_bcra')
     .select('payload, fetched_at')
     .eq('identificador', identificador)
     .gte('fetched_at', cutoff)
-    .maybeSingle() as { data: CacheRow | null };
+    .maybeSingle() as { data: CacheRow | null; error: { message: string } | null };
+
+  if (cacheError) {
+    console.error('[cache] readCache failed:', cacheError.message);
+    return null;
+  }
 
   if (!data) return null;
 
@@ -123,28 +128,43 @@ function getCuilCandidates(input: string): string[] {
 
 type FetchResult = BcraDeudaResults | 'not-found' | 'error';
 
+const FETCH_RETRY_DELAYS_MS = [1500, 3000] as const;
+
 async function fetchDeudas(cuil: string): Promise<FetchResult> {
   if (!PROXY) throw new Error('[BCRA] PROXY_URL no configurado — definir en variables de entorno');
-  try {
-    const endpoint = `/centraldedeudores/v1.0/Deudas/${cuil}`;
-    const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
-    const res      = await fetch(url, {
-      cache:   'no-store',
-      signal:  AbortSignal.timeout(30_000),
-      headers: {
-        ...(PROXY_API_KEY && { 'x-proxy-key': PROXY_API_KEY }),
-      },
-    });
+  const endpoint = `/centraldedeudores/v1.0/Deudas/${cuil}`;
+  const url      = `${PROXY}?endpoint=${encodeURIComponent(endpoint)}`;
 
-    if (res.status === 404) return 'not-found';
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        cache:   'no-store',
+        signal:  AbortSignal.timeout(30_000),
+        headers: { ...(PROXY_API_KEY && { 'x-proxy-key': PROXY_API_KEY }) },
+      });
 
-    const json = await res.json() as { status: number; results: BcraDeudaResults };
-    if (json.status !== 200 || !json.results) return 'not-found';
-    return json.results;
-  } catch {
-    return 'error';
+      if (res.status === 404) return 'not-found';
+
+      if ((res.status === 502 || res.status === 503) && attempt < 3) {
+        await new Promise((r) => setTimeout(r, FETCH_RETRY_DELAYS_MS[attempt - 1]));
+        continue;
+      }
+
+      if (!res.ok) return 'error';
+
+      const json = await res.json() as { status: number; results: BcraDeudaResults };
+      if (json.status !== 200 || !json.results) return 'not-found';
+      return json.results;
+    } catch (err) {
+      const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+      if (!isTimeout && attempt < 3) {
+        await new Promise((r) => setTimeout(r, FETCH_RETRY_DELAYS_MS[attempt - 1]));
+        continue;
+      }
+      return 'error';
+    }
   }
+  return 'error';
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -158,16 +178,39 @@ async function fetchDeudas(cuil: string): Promise<FetchResult> {
  * - Unauthenticated callers → outcome 'error', rejected immediately.
  */
 export async function queryBcra(identifier: string): Promise<BcraQueryResult> {
-  // Input validation — only digits, 7–11 chars (DNI: 7–8, CUIT: 11).
+  // Input validation — only digits, exactly 7–8 chars (DNI) or 11 chars (CUIT).
+  // 9–10 digit inputs are not valid formats and must be rejected.
   // RiskQuery.tsx already strips non-digits client-side, but queryBcra is a
   // public Server Action callable directly — validate at the server boundary.
-  if (!/^\d{7,11}$/.test(identifier)) {
+  if (!/^(\d{7,8}|\d{11})$/.test(identifier)) {
     return {
       data:         null,
       outcome:      'error',
       fetchedAt:    null,
       resolvedCuil: null,
       error:        'Identificador inválido. Ingresá un DNI (7-8 dígitos) o CUIT (11 dígitos).',
+    };
+  }
+
+  // Fail-closed: PROXY must be present or fetchDeudas will throw.
+  if (!PROXY) {
+    return {
+      data:         null,
+      outcome:      'error',
+      fetchedAt:    null,
+      resolvedCuil: null,
+      error:        'Proxy URL no configurada.',
+    };
+  }
+
+  // Fail-closed: PROXY_API_KEY must be present or the fetch will silently fail with 401.
+  if (!PROXY_API_KEY) {
+    return {
+      data:         null,
+      outcome:      'error',
+      fetchedAt:    null,
+      resolvedCuil: null,
+      error:        'Proxy API key no configurada.',
     };
   }
 

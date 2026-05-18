@@ -36,7 +36,12 @@ async function bcraFetch(url, signal) {
 fastify.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
 
 fastify.get('/fetch-bcra', async (request, reply) => {
-  if (PROXY_API_KEY && request.headers['x-proxy-key'] !== PROXY_API_KEY) {
+  if (!PROXY_API_KEY) {
+    return reply.status(500).send({ error: 'Proxy no configurado.' });
+  }
+  const rawKey  = request.headers['x-proxy-key'];
+  const provided = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+  if (!provided || provided !== PROXY_API_KEY) {
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
@@ -45,7 +50,16 @@ fastify.get('/fetch-bcra', async (request, reply) => {
     return reply.status(400).send({ error: 'Missing endpoint param' });
   }
 
-  const url        = `${BCRA_BASE}${endpoint}`;
+  let normalizedPath;
+  try {
+    normalizedPath = new URL(endpoint, 'https://placeholder').pathname;
+  } catch {
+    return reply.status(400).send({ error: 'endpoint inválido' });
+  }
+  if (!normalizedPath.startsWith('/centraldedeudores/')) {
+    return reply.status(400).send({ error: 'endpoint no permitido' });
+  }
+  const url        = `${BCRA_BASE}${normalizedPath}`;
   const controller = new AbortController();
   const timer      = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -53,7 +67,7 @@ fastify.get('/fetch-bcra', async (request, reply) => {
     const res = await bcraFetch(url, controller.signal);
     clearTimeout(timer);
     const body = await res.text();
-    return reply.status(res.status).header('content-type', 'application/json').send(body);
+    return reply.status(res.status).header('content-type', res.headers.get('content-type') ?? 'application/json').send(body);
   } catch (err) {
     clearTimeout(timer);
     fastify.log.error({ err, msg: 'upstream error' });
